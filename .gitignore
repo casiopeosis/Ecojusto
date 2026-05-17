@@ -1,0 +1,175 @@
+# ==========================================================
+# OS FILES
+# ==========================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ==========================================================
+# PYTHON
+# ==========================================================
+
+# Bytecode / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Compiled extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python environments
+.python-version
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache/
+hypothesis/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Type checkers
+.dmypy.json
+dmypy.json
+
+# Logs
+*.log
+
+# ==========================================================
+# ENV / API KEYS / SECRETS
+# ==========================================================
+
+.env
+.env.*
+*.env
+
+# Secret files
+secrets/
+credentials/
+*.pem
+*.key
+*.crt
+*.p12
+
+# API config examples
+config.local.*
+settings.local.*
+
+# Keep template files
+!.env.example
+!.env.template
+
+# ==========================================================
+# DOCKER
+# ==========================================================
+
+# Docker overrides / local configs
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Environment files used by Docker
+docker.env
+
+# Volumes / runtime
+docker-data/
+volumes/
+
+# ==========================================================
+# IDE / EDITORS
+# ==========================================================
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/
+*.iml
+
+# Vim
+*.swp
+*.swo
+
+# Sublime
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================================
+# DATABASES
+# ==========================================================
+
+*.db
+*.sqlite
+*.sqlite3
+
+# ==========================================================
+# TEMP / CACHE
+# ==========================================================
+
+tmp/
+temp/
+.cache/
+*.tmp
+
+# ==========================================================
+# CI / BUILD OUTPUT
+# ==========================================================
+
+coverage.xml
+nosetests.xml
+*.cover
+
+# Static analysis
+bandit-report.json
+
+# ==========================================================
+# MISC
+# ==========================================================
+
+*.bak
+*.orig
