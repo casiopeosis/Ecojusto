@@ -1,6 +1,13 @@
 # frontend/app.py
 # Dashboard interactivo — EcoJusto AI
 # Streamlit + Plotly Express
+#
+# CAMBIOS v2:
+# - Bug corregido: penalizacion_opacidad ahora viene directo del backend
+#   (antes se calculaba en el frontend y siempre daba 0).
+# - Nueva sección: "Datos laborales por país" con fuente del Banco Mundial.
+# - Scatter plot mejorado: tamaño de burbuja = factor_riesgo_pais.
+# - Spinner mientras se consulta la API del Banco Mundial al arrancar.
 
 import sys
 import os
@@ -13,6 +20,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from data.db import MATERIALES, PRENDAS
+from data.world_bank import get_datos_pais
 from algoritmo.ensamblaje import run_all
 from llm.narrativa import generar_narrativa
 
@@ -26,7 +34,9 @@ st.set_page_config(
 )
 
 st.title("🌿 EcoJusto AI")
-st.caption("Auditor algorítmico de externalidades socioambientales en la industria de la moda")
+st.caption(
+    "Auditor algorítmico de externalidades socioambientales en la industria de la moda"
+)
 
 # ── Sidebar: inputs ────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -46,20 +56,25 @@ with st.sidebar:
 
     st.divider()
     st.markdown(
-        "**Fuentes:** Fashion Transparency Index 2023 · "
-        "CSI Global Rights Index · OIT · Ellen MacArthur Foundation"
+        "**Fuentes:**  \n"
+        "Fashion Transparency Index 2023  \n"
+        "API Banco Mundial (SL.EMP.VULN.ZS · SL.UEM.TOTL.ZS)  \n"
+        "OIT Global Wage Report  \n"
+        "Ellen MacArthur Foundation 2017"
     )
 
 # ── Cálculo ───────────────────────────────────────────────────────────────────
-resultados = run_all(material_key, prenda_key)
+with st.spinner("Consultando datos laborales del Banco Mundial..."):
+    resultados = run_all(material_key, prenda_key)
+
 df = pd.DataFrame(resultados)
 
 material_label = MATERIALES[material_key]["label"]
 prenda_label   = PRENDAS[prenda_key]["label"]
 
 # ── Métricas resumen ──────────────────────────────────────────────────────────
-peor  = df.iloc[0]   # mayor P_justo (más cara externamente)
-mejor = df.iloc[-1]  # menor P_justo
+peor  = df.iloc[0]    # mayor P_justo
+mejor = df.iloc[-1]   # menor P_justo
 brecha_promedio = round((df["p_justo"] - df["precio_etiqueta"]).mean())
 
 col1, col2, col3 = st.columns(3)
@@ -83,21 +98,12 @@ col3.metric(
 
 st.divider()
 
-# ── Gráfica de barras apiladas ─────────────────────────────────────────────────
+# ── Gráfica de barras apiladas ────────────────────────────────────────────────
 st.subheader(f"Dashboard comparativo — {prenda_label} de {material_label}")
 
 # Construir df largo para barras apiladas
-df_plot = df[["empresa", "precio_etiqueta", "c_ambiental", "c_social"]].copy()
-df_plot["penalizacion_opacidad"] = df["p_justo"] - (
-    df["alpha_e"] * (df["precio_etiqueta"] + df["c_ambiental"] + df["c_social"]) / df["alpha_e"]
-    # Nota: la penalización no es aditiva sino multiplicativa; la representamos como
-    # la diferencia entre P_justo y la suma sin multiplicador para visualización.
-)
-# Recalcular correctamente la porción del multiplicador
-df_plot["base_sin_alpha"] = df["precio_etiqueta"] + df["c_ambiental"] + df["c_social"]
-df_plot["penalizacion_opacidad"] = df["p_justo"] - df_plot["base_sin_alpha"]
-
-df_long = df_plot.melt(
+# penalizacion_opacidad ya viene calculada correctamente desde ensamblaje.py
+df_long = df.melt(
     id_vars="empresa",
     value_vars=["precio_etiqueta", "c_ambiental", "c_social", "penalizacion_opacidad"],
     var_name="componente",
@@ -105,10 +111,10 @@ df_long = df_plot.melt(
 )
 
 etiquetas = {
-    "precio_etiqueta":      "Precio de etiqueta",
-    "c_ambiental":          "Costo ambiental",
-    "c_social":             "Costo social",
-    "penalizacion_opacidad":"Penalización por opacidad",
+    "precio_etiqueta":       "Precio de etiqueta",
+    "c_ambiental":           "Costo ambiental",
+    "c_social":              "Costo social",
+    "penalizacion_opacidad": "Penalización por opacidad",
 }
 colores = {
     "Precio de etiqueta":        "#4A90D9",
@@ -118,9 +124,7 @@ colores = {
 }
 
 df_long["componente"] = df_long["componente"].map(etiquetas)
-
-# Ordenar empresas por P_justo descendente
-orden = df.sort_values("p_justo", ascending=False)["empresa"].tolist()
+orden_empresas = df.sort_values("p_justo", ascending=False)["empresa"].tolist()
 
 fig = px.bar(
     df_long,
@@ -128,7 +132,10 @@ fig = px.bar(
     y="mxn",
     color="componente",
     color_discrete_map=colores,
-    category_orders={"empresa": orden, "componente": list(etiquetas.values())},
+    category_orders={
+        "empresa":     orden_empresas,
+        "componente":  list(etiquetas.values()),
+    },
     labels={"mxn": "MXN", "empresa": "Empresa", "componente": "Componente"},
     title=f"Precio justo real por empresa — {prenda_label} de {material_label}",
 )
@@ -147,56 +154,105 @@ st.subheader("Detalle por empresa")
 NIVEL_EMOJI = {"alta": "🟢", "media": "🟡", "baja": "🔴"}
 
 df_tabla = df[[
-    "empresa", "precio_etiqueta", "c_ambiental", "c_social",
-    "alpha_e", "p_justo", "vida_util_meses", "transparencia_pct", "nivel"
+    "empresa", "iso_pais", "precio_etiqueta", "c_ambiental", "c_social",
+    "penalizacion_opacidad", "alpha_e", "p_justo",
+    "vida_util_meses", "transparencia_pct", "factor_riesgo_pais", "nivel",
 ]].copy()
-df_tabla["nivel"] = df_tabla["nivel"].map(lambda n: f"{NIVEL_EMOJI[n]} {n.capitalize()}")
+df_tabla["nivel"] = df_tabla["nivel"].map(
+    lambda n: f"{NIVEL_EMOJI.get(n, '⚪')} {n.capitalize()}"
+)
 df_tabla.columns = [
-    "Empresa", "Precio etiqueta ($)", "C. ambiental ($)", "C. social ($)",
-    "α (opacidad)", "Precio justo ($)", "Vida útil (meses)", "Transparencia (%)", "Nivel ético"
+    "Empresa", "País mfg.", "Etiqueta ($)", "C. ambiental ($)", "C. social ($)",
+    "Penaliz. opacidad ($)", "α", "Precio justo ($)",
+    "Vida útil (m)", "Transparencia (%)", "Riesgo país", "Nivel ético",
 ]
-
 st.dataframe(df_tabla, use_container_width=True, hide_index=True)
 
-# ── Gráfica de dispersión: transparencia vs brecha ────────────────────────────
+st.divider()
+
+# ── Scatter: transparencia vs brecha ─────────────────────────────────────────
 st.subheader("Transparencia vs. brecha con precio justo")
 
 df["brecha"] = df["p_justo"] - df["precio_etiqueta"]
+
 fig2 = px.scatter(
     df,
     x="transparencia_pct",
     y="brecha",
     text="empresa",
-    size="p_justo",
+    size="factor_riesgo_pais",      # burbuja = riesgo laboral del país
+    size_max=40,
     color="nivel",
-    color_discrete_map={"alta": "#27AE60", "media": "#E67E22", "baja": "#C0392B"},
-    labels={
-        "transparencia_pct": "Índice de transparencia FTI (%)",
-        "brecha": "Brecha oculta (P_justo − etiqueta, MXN)",
-        "nivel": "Nivel ético",
+    color_discrete_map={
+        "alta":  "#27AE60",
+        "media": "#E67E22",
+        "baja":  "#C0392B",
     },
+    labels={
+        "transparencia_pct":  "Índice de transparencia FTI (%)",
+        "brecha":             "Brecha oculta (P_justo − etiqueta, MXN)",
+        "nivel":              "Nivel ético",
+        "factor_riesgo_pais": "Riesgo país (Banco Mundial)",
+    },
+    title="A menor transparencia y mayor riesgo país → mayor brecha oculta",
 )
 fig2.update_traces(textposition="top center")
 fig2.update_layout(
     plot_bgcolor="rgba(0,0,0,0)",
     yaxis=dict(gridcolor="rgba(200,200,200,0.3)"),
     xaxis=dict(gridcolor="rgba(200,200,200,0.3)"),
-    height=400,
+    height=420,
 )
 st.plotly_chart(fig2, use_container_width=True)
 
+st.divider()
+
+# ── Panel de datos laborales por país (Banco Mundial) ────────────────────────
+st.subheader("Datos laborales por país de manufactura (Banco Mundial)")
+st.caption(
+    "Factor de riesgo calculado desde SL.EMP.VULN.ZS (trabajadores vulnerables) "
+    "y SL.UEM.TOTL.ZS (desempleo total). "
+    "Fuente: API del Banco Mundial, sin API key."
+)
+
+paises_unicos = df[["iso_pais", "empresa"]].drop_duplicates("iso_pais")
+filas_pais = []
+for _, row in paises_unicos.iterrows():
+    datos = get_datos_pais(row["iso_pais"])
+    filas_pais.append({
+        "País (ISO3)":              datos["iso"],
+        "% Trabajadores vulnerables": (
+            f"{datos['vulnerabilidad_pct']}%" if datos["vulnerabilidad_pct"] else "N/D"
+        ),
+        "% Desempleo":              (
+            f"{datos['desempleo_pct']}%" if datos["desempleo_pct"] else "N/D"
+        ),
+        "Factor riesgo calculado":  datos["factor_riesgo"],
+        "Fuente":                   datos["fuente"],
+    })
+
+st.dataframe(
+    pd.DataFrame(filas_pais),
+    use_container_width=True,
+    hide_index=True,
+)
+
+st.divider()
+
 # ── Narrativa LLM (opcional) ──────────────────────────────────────────────────
 if usar_llm:
-    with st.spinner("Generando narrativa..."):
+    with st.spinner("Generando narrativa con Claude..."):
         narrativa = generar_narrativa(resultados, material_label, prenda_label)
     if narrativa:
-        st.divider()
         st.subheader("📰 Narrativa periodística")
         st.info(narrativa)
     else:
-        st.warning("No se encontró ANTHROPIC_API_KEY en el entorno. Agrega tu key en el archivo .env")
+        st.warning(
+            "No se encontró ANTHROPIC_API_KEY en el entorno. "
+            "Agrega tu key en el archivo .env"
+        )
 
-# ── Footer ─────────────────────────────────────────────────────────────────────
+# ── Footer ────────────────────────────────────────────────────────────────────
 st.divider()
 st.caption(
     "EcoJusto AI — Proyecto académico de IA, 2025. "
