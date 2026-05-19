@@ -1,16 +1,12 @@
-# frontend/app.py
-# Dashboard interactivo — EcoJusto AI
-# Streamlit + Plotly Express
-#
-# CAMBIOS v2:
-# - Bug corregido: penalizacion_opacidad ahora viene directo del backend
-#   (antes se calculaba en el frontend y siempre daba 0).
-# - Nueva sección: "Datos laborales por país" con fuente del Banco Mundial.
-# - Scatter plot mejorado: tamaño de burbuja = factor_riesgo_pais.
-# - Spinner mientras se consulta la API del Banco Mundial al arrancar.
+# frontend/app.py  — v4
+# CAMBIOS:
+# - Panel nuevo: "Cadena de suministro por empresa" — mapa de calor con
+#   qué % de producción viene de cada país y el C_social de cada uno.
+# - Panel salarial ahora muestra TODOS los países de manufactura de TODAS
+#   las empresas, con su peso en la cadena y brecha salarial individual.
+# - Tooltip en gráfica de barras muestra países de manufactura.
 
-import sys
-import os
+import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import streamlit as st
@@ -19,242 +15,252 @@ import plotly.graph_objects as go
 import pandas as pd
 from dotenv import load_dotenv
 
-from data.db import MATERIALES, PRENDAS
+from data.db import MATERIALES, PRENDAS, SALARIOS_PAIS, TC_MXN, MARGEN_REINVERSION_DEFAULT, EMPRESAS
 from data.world_bank import get_datos_pais
 from algoritmo.ensamblaje import run_all
 from llm.narrativa import generar_narrativa
 
 load_dotenv()
 
-# ── Configuración de página ────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="EcoJusto AI",
-    page_icon="🌿",
-    layout="wide",
-)
-
+st.set_page_config(page_title="EcoJusto AI 🌿", page_icon="🌿", layout="wide")
 st.title("🌿 EcoJusto AI")
-st.caption(
-    "Auditor algorítmico de externalidades socioambientales en la industria de la moda"
-)
+st.caption("Auditor algorítmico de externalidades socioambientales — industria de la moda")
 
-# ── Sidebar: inputs ────────────────────────────────────────────────────────────
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("Parámetros")
-
-    material_key = st.selectbox(
-        "Material",
-        options=list(MATERIALES.keys()),
-        format_func=lambda k: MATERIALES[k]["label"],
-    )
-    prenda_key = st.selectbox(
-        "Tipo de prenda",
-        options=list(PRENDAS.keys()),
-        format_func=lambda k: PRENDAS[k]["label"],
-    )
-    usar_llm = st.toggle("Narrativa IA (requiere API key)", value=False)
-
+    st.header("⚙️ Parámetros")
+    material_key = st.selectbox("Material", list(MATERIALES.keys()),
+                                format_func=lambda k: MATERIALES[k]["label"])
+    prenda_key   = st.selectbox("Tipo de prenda", list(PRENDAS.keys()),
+                                format_func=lambda k: PRENDAS[k]["label"])
+    margen_pct   = st.slider("Margen de reinversión empresarial (%)",
+                             5, 35, int(MARGEN_REINVERSION_DEFAULT * 100), 5,
+                             help="Muévelo en presentación para mostrar sensibilidad del modelo.")
+    margen       = margen_pct / 100
+    usar_llm     = st.toggle("📰 Narrativa IA (requiere API key)", value=False)
     st.divider()
     st.markdown(
         "**Fuentes:**  \n"
-        "Fashion Transparency Index 2023  \n"
-        "API Banco Mundial (SL.EMP.VULN.ZS · SL.UEM.TOTL.ZS)  \n"
-        "OIT Global Wage Report  \n"
-        "Ellen MacArthur Foundation 2017"
+        "· Fashion Transparency Index 2023  \n"
+        "· Adidas AR 2024 · Nike 10-K 2024  \n"
+        "· Inditex AR 2023 · FTM/Patagonia 2023  \n"
+        "· API Banco Mundial  \n"
+        "· WageIndicator Living Wage Oct 2024  \n"
+        "· Water Footprint Network / LCA 2024"
     )
 
 # ── Cálculo ───────────────────────────────────────────────────────────────────
-with st.spinner("Consultando datos laborales del Banco Mundial..."):
-    resultados = run_all(material_key, prenda_key)
+with st.spinner("🌐 Consultando datos laborales del Banco Mundial..."):
+    resultados = run_all(material_key, prenda_key, margen)
 
-df = pd.DataFrame(resultados)
+df           = pd.DataFrame(resultados)
+mat_label    = MATERIALES[material_key]["label"]
+prenda_label = PRENDAS[prenda_key]["label"]
 
-material_label = MATERIALES[material_key]["label"]
-prenda_label   = PRENDAS[prenda_key]["label"]
+# ── Métricas ──────────────────────────────────────────────────────────────────
+peor              = df.iloc[0]
+mejor             = df.iloc[-1]
+n_externalizan    = (df["brecha"] < 0).sum()
+ahorro_prom       = abs(round(df[df["brecha"] < 0]["brecha"].mean())) if n_externalizan > 0 else 0
 
-# ── Métricas resumen ──────────────────────────────────────────────────────────
-peor  = df.iloc[0]    # mayor P_justo
-mejor = df.iloc[-1]   # menor P_justo
-brecha_promedio = round((df["p_justo"] - df["precio_etiqueta"]).mean())
-
-col1, col2, col3 = st.columns(3)
-col1.metric(
-    "Empresa con mayor costo real",
-    peor["empresa"],
-    f"${peor['p_justo']:,} MXN (etiqueta ${peor['precio_etiqueta']:,})",
-    delta_color="inverse",
-)
-col2.metric(
-    "Empresa más responsable",
-    mejor["empresa"],
-    f"${mejor['p_justo']:,} MXN · {mejor['transparencia_pct']}% transparencia",
-)
-col3.metric(
-    "Brecha promedio oculta",
-    f"${brecha_promedio:,} MXN",
-    "por encima del precio de etiqueta",
-    delta_color="inverse",
-)
+c1, c2, c3 = st.columns(3)
+c1.metric("Mayor externalización", peor["empresa"],
+          f"cobra ${peor['precio_etiqueta']:,} · justo ${peor['p_justo']:,} MXN",
+          delta_color="inverse")
+c2.metric("Más alineada", mejor["empresa"],
+          f"${mejor['precio_etiqueta']:,} etiqueta · ${mejor['p_justo']:,} justo")
+c3.metric("Empresas que externalizan", f"{n_externalizan} de {len(df)}",
+          f"~${ahorro_prom:,} MXN/prenda no pagados" if ahorro_prom else "ninguna",
+          delta_color="inverse")
 
 st.divider()
 
-# ── Gráfica de barras apiladas ────────────────────────────────────────────────
-st.subheader(f"Dashboard comparativo — {prenda_label} de {material_label}")
+# ── Gráfica 1: Etiqueta vs P_justo ────────────────────────────────────────────
+st.subheader(f"💰 Precio etiqueta real vs. Precio justo — {prenda_label} de {mat_label}")
+st.caption("🔴 cobra menos de lo justo (externaliza) · 🟢 cobra más (posible internalización o margen alto)")
 
-# Construir df largo para barras apiladas
-# penalizacion_opacidad ya viene calculada correctamente desde ensamblaje.py
-df_long = df.melt(
+df_s = df.sort_values("brecha")
+orden = df_s["empresa"].tolist()
+
+fig1 = go.Figure()
+fig1.add_trace(go.Bar(
+    name="Precio de etiqueta",
+    x=df_s["empresa"], y=df_s["precio_etiqueta"],
+    marker_color="#4A90D9",
+    text=df_s["precio_etiqueta"].apply(lambda v: f"${v:,}"),
+    textposition="outside",
+    customdata=df_s["n_paises"],
+    hovertemplate="<b>%{x}</b><br>Etiqueta: $%{y:,} MXN<br>Países de manufactura: %{customdata}<extra></extra>",
+))
+fig1.add_trace(go.Scatter(
+    name="Precio justo (P_justo)",
+    x=df_s["empresa"], y=df_s["p_justo"],
+    mode="markers+lines",
+    marker=dict(size=12, color="#E67E22", symbol="diamond"),
+    line=dict(color="#E67E22", width=2, dash="dot"),
+    text=df_s["p_justo"].apply(lambda v: f"${v:,}"),
+    textposition="top center",
+))
+fig1.update_layout(
+    barmode="group", height=420,
+    plot_bgcolor="rgba(0,0,0,0)",
+    yaxis=dict(gridcolor="rgba(200,200,200,0.2)", title="MXN"),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    xaxis=dict(categoryorder="array", categoryarray=orden),
+)
+st.plotly_chart(fig1, use_container_width=True)
+
+# ── Gráfica 2: Desglose del P_justo ──────────────────────────────────────────
+st.subheader("🔍 Desglose del Precio Justo por componente")
+st.caption("El punto ✕ naranja es el precio de etiqueta real de cada empresa.")
+
+df_long = df_s.melt(
     id_vars="empresa",
-    value_vars=["precio_etiqueta", "c_ambiental", "c_social", "penalizacion_opacidad"],
-    var_name="componente",
-    value_name="mxn",
+    value_vars=["c_laboral_digno","c_ambiental","c_social","penalizacion_opacidad","margen_reinversion"],
+    var_name="componente", value_name="mxn",
 )
-
 etiquetas = {
-    "precio_etiqueta":       "Precio de etiqueta",
-    "c_ambiental":           "Costo ambiental",
-    "c_social":              "Costo social",
-    "penalizacion_opacidad": "Penalización por opacidad",
+    "c_laboral_digno":       "Salario digno manufactura",
+    "c_ambiental":           "Impacto ambiental (agua + CO₂)",
+    "c_social":              "Brecha salarial (deuda social)",
+    "penalizacion_opacidad": "Penalización opacidad (KL)",
+    f"margen_reinversion":   f"Margen reinversión ({margen_pct}%)",
 }
-colores = {
-    "Precio de etiqueta":        "#4A90D9",
-    "Costo ambiental":           "#27AE60",
-    "Costo social":              "#E67E22",
-    "Penalización por opacidad": "#C0392B",
+colores_comp = {
+    "Salario digno manufactura":       "#2ECC71",
+    "Impacto ambiental (agua + CO₂)":  "#3498DB",
+    "Brecha salarial (deuda social)":  "#E74C3C",
+    "Penalización opacidad (KL)":      "#9B59B6",
+    f"Margen reinversión ({margen_pct}%)": "#95A5A6",
 }
-
 df_long["componente"] = df_long["componente"].map(etiquetas)
-orden_empresas = df.sort_values("p_justo", ascending=False)["empresa"].tolist()
-
-fig = px.bar(
-    df_long,
-    x="empresa",
-    y="mxn",
-    color="componente",
-    color_discrete_map=colores,
-    category_orders={
-        "empresa":     orden_empresas,
-        "componente":  list(etiquetas.values()),
-    },
-    labels={"mxn": "MXN", "empresa": "Empresa", "componente": "Componente"},
-    title=f"Precio justo real por empresa — {prenda_label} de {material_label}",
-)
-fig.update_layout(
-    barmode="stack",
-    legend_title_text="Componente del precio",
-    plot_bgcolor="rgba(0,0,0,0)",
-    yaxis=dict(gridcolor="rgba(200,200,200,0.3)"),
-    height=450,
-)
-st.plotly_chart(fig, use_container_width=True)
-
-# ── Tabla detallada ────────────────────────────────────────────────────────────
-st.subheader("Detalle por empresa")
-
-NIVEL_EMOJI = {"alta": "🟢", "media": "🟡", "baja": "🔴"}
-
-df_tabla = df[[
-    "empresa", "iso_pais", "precio_etiqueta", "c_ambiental", "c_social",
-    "penalizacion_opacidad", "alpha_e", "p_justo",
-    "vida_util_meses", "transparencia_pct", "factor_riesgo_pais", "nivel",
-]].copy()
-df_tabla["nivel"] = df_tabla["nivel"].map(
-    lambda n: f"{NIVEL_EMOJI.get(n, '⚪')} {n.capitalize()}"
-)
-df_tabla.columns = [
-    "Empresa", "País mfg.", "Etiqueta ($)", "C. ambiental ($)", "C. social ($)",
-    "Penaliz. opacidad ($)", "α", "Precio justo ($)",
-    "Vida útil (m)", "Transparencia (%)", "Riesgo país", "Nivel ético",
-]
-st.dataframe(df_tabla, use_container_width=True, hide_index=True)
-
-st.divider()
-
-# ── Scatter: transparencia vs brecha ─────────────────────────────────────────
-st.subheader("Transparencia vs. brecha con precio justo")
-
-df["brecha"] = df["p_justo"] - df["precio_etiqueta"]
-
-fig2 = px.scatter(
-    df,
-    x="transparencia_pct",
-    y="brecha",
-    text="empresa",
-    size="factor_riesgo_pais",      # burbuja = riesgo laboral del país
-    size_max=40,
-    color="nivel",
-    color_discrete_map={
-        "alta":  "#27AE60",
-        "media": "#E67E22",
-        "baja":  "#C0392B",
-    },
-    labels={
-        "transparencia_pct":  "Índice de transparencia FTI (%)",
-        "brecha":             "Brecha oculta (P_justo − etiqueta, MXN)",
-        "nivel":              "Nivel ético",
-        "factor_riesgo_pais": "Riesgo país (Banco Mundial)",
-    },
-    title="A menor transparencia y mayor riesgo país → mayor brecha oculta",
-)
-fig2.update_traces(textposition="top center")
-fig2.update_layout(
-    plot_bgcolor="rgba(0,0,0,0)",
-    yaxis=dict(gridcolor="rgba(200,200,200,0.3)"),
-    xaxis=dict(gridcolor="rgba(200,200,200,0.3)"),
-    height=420,
-)
+fig2 = px.bar(df_long, x="empresa", y="mxn", color="componente",
+              color_discrete_map=colores_comp,
+              category_orders={"empresa": orden, "componente": list(etiquetas.values())},
+              labels={"mxn":"MXN","empresa":"Empresa","componente":"Componente"})
+fig2.add_trace(go.Scatter(
+    name="Precio etiqueta real", x=df_s["empresa"], y=df_s["precio_etiqueta"],
+    mode="markers", marker=dict(size=14, color="#E67E22", symbol="x", line=dict(width=2)),
+))
+fig2.update_layout(barmode="stack", height=430, plot_bgcolor="rgba(0,0,0,0)",
+                   yaxis=dict(gridcolor="rgba(200,200,200,0.2)"),
+                   xaxis=dict(categoryorder="array", categoryarray=orden))
 st.plotly_chart(fig2, use_container_width=True)
 
 st.divider()
 
-# ── Panel de datos laborales por país (Banco Mundial) ────────────────────────
-st.subheader("Datos laborales por país de manufactura (Banco Mundial)")
+# ── Panel: Cadena de suministro por empresa ───────────────────────────────────
+st.subheader("🗺️ Cadena de suministro por empresa")
 st.caption(
-    "Factor de riesgo calculado desde SL.EMP.VULN.ZS (trabajadores vulnerables) "
-    "y SL.UEM.TOTL.ZS (desempleo total). "
-    "Fuente: API del Banco Mundial, sin API key."
+    "Distribución real de manufactura por país. "
+    "Fuentes: reportes anuales Adidas 2024, Nike 10-K 2024, Inditex 2023, "
+    "FTM/Patagonia 2023, FASH455/Shein 2023, Statista/Primark 2024."
 )
 
-paises_unicos = df[["iso_pais", "empresa"]].drop_duplicates("iso_pais")
-filas_pais = []
-for _, row in paises_unicos.iterrows():
-    datos = get_datos_pais(row["iso_pais"])
-    filas_pais.append({
-        "País (ISO3)":              datos["iso"],
-        "% Trabajadores vulnerables": (
-            f"{datos['vulnerabilidad_pct']}%" if datos["vulnerabilidad_pct"] else "N/D"
-        ),
-        "% Desempleo":              (
-            f"{datos['desempleo_pct']}%" if datos["desempleo_pct"] else "N/D"
-        ),
-        "Factor riesgo calculado":  datos["factor_riesgo"],
-        "Fuente":                   datos["fuente"],
-    })
+filas_cadena = []
+for r in resultados:
+    empresa_nombre = r["empresa"]
+    for iso, datos in r["desglose_paises"].items():
+        filas_cadena.append({
+            "Empresa":              empresa_nombre,
+            "País":                 datos["pais_nombre"],
+            "ISO3":                 iso,
+            "% producción":         f"{datos['fraccion_pct']}%",
+            "Sal. mínimo (USD/mes)": f"${datos['sal_minimo_usd']:,}",
+            "Sal. digno (USD/mes)":  f"${datos['sal_digno_usd']:,}",
+            "Brecha (USD/mes)":      f"${datos['sal_digno_usd'] - datos['sal_minimo_usd']:,}",
+            "Factor riesgo (BM)":   datos["factor_riesgo"],
+            "C_social este país ($)": f"${datos['c_social']:,}",
+        })
 
-st.dataframe(
-    pd.DataFrame(filas_pais),
-    use_container_width=True,
-    hide_index=True,
+df_cadena = pd.DataFrame(filas_cadena)
+st.dataframe(df_cadena, use_container_width=True, hide_index=True)
+
+# Mapa de calor: empresa × país → fracción de producción
+st.caption("Mapa de calor: intensidad = % de producción en ese país")
+pivot_data = []
+for r in resultados:
+    for iso, datos in r["desglose_paises"].items():
+        pivot_data.append({
+            "Empresa": r["empresa"],
+            "País":    datos["pais_nombre"],
+            "Fracción": datos["fraccion_pct"],
+        })
+
+df_pivot = pd.DataFrame(pivot_data).pivot_table(
+    index="Empresa", columns="País", values="Fracción", fill_value=0
 )
+fig_heat = px.imshow(
+    df_pivot,
+    labels=dict(x="País de manufactura", y="Empresa", color="% producción"),
+    color_continuous_scale="Reds",
+    text_auto=True,
+    aspect="auto",
+)
+fig_heat.update_layout(height=350, plot_bgcolor="rgba(0,0,0,0)")
+st.plotly_chart(fig_heat, use_container_width=True)
 
 st.divider()
 
-# ── Narrativa LLM (opcional) ──────────────────────────────────────────────────
+# ── Panel: Impacto ambiental ──────────────────────────────────────────────────
+st.subheader(f"🌊 Impacto ambiental — {mat_label}")
+mat       = MATERIALES[material_key]
+peso_ref  = mat["peso_prenda_kg"].get(prenda_key, 0.30)
+ca, cb, cc = st.columns(3)
+ca.metric("Huella hídrica por prenda",  f"{round(mat['huella_hidrica_litros_kg']*peso_ref):,} litros",
+          f"{mat['huella_hidrica_litros_kg']:,} L/kg fibra")
+cb.metric("Emisiones CO₂ por prenda",   f"{round(mat['co2_kg_por_kg_fibra']*peso_ref,2)} kg CO₂",
+          f"{mat['co2_kg_por_kg_fibra']} kg CO₂/kg fibra")
+cc.metric("Peso estimado",              f"{peso_ref*1000:.0f} g", mat_label)
+
+st.divider()
+
+# ── Tabla resumen ─────────────────────────────────────────────────────────────
+st.subheader("📋 Resumen por empresa")
+VEREDICTO_LABEL = {
+    "externaliza": "🔴 Externaliza", "subestimado": "🟠 Subestimado",
+    "alineado":    "🟢 Alineado",    "margen_alto": "🟡 Margen alto",
+    "sobreprecio": "⚪ Sobreprecio",
+}
+df_tab = df_s[["empresa","n_paises","precio_etiqueta","p_justo","brecha",
+               "c_laboral_digno","c_ambiental","c_social",
+               "vida_util_meses","transparencia_pct","alpha_e","veredicto"]].copy()
+df_tab["veredicto"] = df_tab["veredicto"].map(VEREDICTO_LABEL)
+df_tab["brecha"]    = df_tab["brecha"].apply(lambda b: f"+${b:,.0f}" if b>=0 else f"-${abs(b):,.0f}")
+df_tab.columns = ["Empresa","# Países mfg.","Etiqueta ($)","P_justo ($)","Brecha ($)",
+                  "C. laboral ($)","C. ambiental ($)","C. social ($)",
+                  "Vida útil (m)","Transparencia (%)","α","Veredicto"]
+st.dataframe(df_tab, use_container_width=True, hide_index=True)
+
+st.divider()
+
+# ── Scatter: transparencia vs brecha ─────────────────────────────────────────
+st.subheader("🔎 Transparencia vs. brecha")
+df["brecha_val"] = df["brecha"]
+fig3 = px.scatter(df, x="transparencia_pct", y="brecha_val", text="empresa",
+                  size="factor_riesgo_prom", size_max=40, color="veredicto",
+                  color_discrete_map={"externaliza":"#C0392B","subestimado":"#E67E22",
+                                      "alineado":"#27AE60","margen_alto":"#F1C40F","sobreprecio":"#95A5A6"},
+                  labels={"transparencia_pct":"FTI (%)","brecha_val":"Brecha (MXN)",
+                          "veredicto":"Veredicto","factor_riesgo_prom":"Riesgo país prom."})
+fig3.add_hline(y=0, line_dash="dash", line_color="gray",
+               annotation_text="Equilibrio: etiqueta = precio justo")
+fig3.update_traces(textposition="top center")
+fig3.update_layout(plot_bgcolor="rgba(0,0,0,0)", height=430,
+                   yaxis=dict(gridcolor="rgba(200,200,200,0.2)"),
+                   xaxis=dict(gridcolor="rgba(200,200,200,0.2)"))
+st.plotly_chart(fig3, use_container_width=True)
+
+# ── Narrativa LLM ─────────────────────────────────────────────────────────────
 if usar_llm:
-    with st.spinner("Generando narrativa con Claude..."):
-        narrativa = generar_narrativa(resultados, material_label, prenda_label)
+    with st.spinner("✍️ Generando narrativa con Claude..."):
+        narrativa = generar_narrativa(resultados, mat_label, prenda_label)
     if narrativa:
+        st.divider()
         st.subheader("📰 Narrativa periodística")
         st.info(narrativa)
     else:
-        st.warning(
-            "No se encontró ANTHROPIC_API_KEY en el entorno. "
-            "Agrega tu key en el archivo .env"
-        )
+        st.warning("Agrega tu ANTHROPIC_API_KEY en .env para activar este módulo.")
 
-# ── Footer ────────────────────────────────────────────────────────────────────
 st.divider()
-st.caption(
-    "EcoJusto AI — Proyecto académico de IA, 2025. "
-    "Los datos son un prototipo demostrativo; no constituyen asesoría de consumo."
-)
+st.caption("EcoJusto AI — Proyecto académico de IA, 2025. Prototipo demostrativo con fuentes citadas.")

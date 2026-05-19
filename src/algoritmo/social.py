@@ -1,53 +1,101 @@
-# algoritmo/social.py
-# Módulo 3 — Costo social via Teoría de Juegos (Dilema del Prisionero Repetido)
+# algoritmo/social.py  — v4
+# CAMBIO PRINCIPAL:
+# - La empresa ya no tiene un solo 'iso_pais'.
+#   Ahora tiene 'manufactura': {ISO3: fracción} con distribución real.
+# - C_social = promedio PONDERADO de la brecha salarial de cada país,
+#   según qué porcentaje de la producción ocurre ahí.
 #
-# La relación empresa–maquiladora se modela como un juego donde la estrategia
-# dominante en equilibrio de Nash estático es la explotación laboral.
-# C_social estima la penalización financiera necesaria para que cooperar sea
-# la estrategia dominante (el costo de "estabilización social").
+# Ejemplo Adidas: 27% Vietnam + 19% Indonesia + 16% China + ...
+# C_social_Adidas = 0.27 × C_social_VNM + 0.19 × C_social_IDN + ...
 #
-# Fundamento: Teoría de Juegos, Dilema del Prisionero (Nash, 1950)
-# Referencia del temario: Clases 23 y 24
-#
-# CAMBIOS v2:
-# - El factor de riesgo país ya no es un número inventado en db.py.
-#   Ahora se consulta en tiempo real desde la API del Banco Mundial
-#   via data/world_bank.py, combinando:
-#     · SL.EMP.VULN.ZS — % trabajadores vulnerables
-#     · SL.UEM.TOTL.ZS — % desempleo total
-#   Con fallback automático si la API no responde.
+# Esto refleja que una empresa que fabrica 30% en Bangladesh
+# y 20% en México tiene una deuda social intermedia entre ambos países,
+# no solo la del país "principal".
 
+from data.db import SALARIOS_PAIS, TC_MXN
 from data.world_bank import get_factor_riesgo_pais
 
 
-def calcular_c_social(empresa: dict, prenda: dict) -> tuple[float, float]:
+def _c_social_pais(iso: str, horas_manufactura: float) -> tuple[float, float, float]:
     """
-    Estima el costo de estabilización social: la transferencia monetaria
-    necesaria para alterar la matriz de pagos del juego empresa–maquiladora
-    de modo que el salario digno sea el equilibrio dominante.
-
-    Fórmula:
-        C_social = precio_base × factor_riesgo_país × brecha_salarial_OIT
-
-    Donde:
-      - precio_base:           precio fijo de la prenda (no el de etiqueta,
-                               para evitar circularidad — empresa más barata
-                               no tiene menor deuda social)
-      - factor_riesgo_país:    índice [0.3, 2.0] calculado desde indicadores
-                               laborales reales del Banco Mundial para el
-                               país principal de manufactura de la empresa
-      - brecha_salarial_OIT:   fracción del precio base que representa la
-                               brecha entre salario pagado y salario digno
-                               estimado por la OIT para ese sector
-
-    Args:
-        empresa: dict con 'iso_pais' (str ISO3)
-        prenda:  dict con 'precio_base' (MXN) y 'brecha_oit' (fracción [0, 1])
+    Calcula el costo social para UN país específico.
 
     Returns:
-        (c_social_mxn: float, factor_riesgo: float)
-        Se retorna el factor_riesgo también para mostrarlo en el dashboard.
+        (c_social_mxn, costo_real_mxn, costo_digno_mxn)
     """
-    factor_riesgo = get_factor_riesgo_pais(empresa["iso_pais"])
-    c_social = prenda["precio_base"] * factor_riesgo * prenda["brecha_oit"]
-    return round(c_social, 2), factor_riesgo
+    sal = SALARIOS_PAIS.get(iso, {
+        "salario_minimo_usd": 200,
+        "salario_digno_usd":  500,
+        "horas_mes":          200,
+    })
+
+    horas_mes        = sal["horas_mes"]
+    sal_minimo_hora  = sal["salario_minimo_usd"] / horas_mes
+    sal_digno_hora   = sal["salario_digno_usd"]  / horas_mes
+
+    costo_real_usd   = sal_minimo_hora * horas_manufactura
+    costo_digno_usd  = sal_digno_hora  * horas_manufactura
+
+    factor_riesgo    = get_factor_riesgo_pais(iso)
+    brecha_usd       = max(0.0, costo_digno_usd - costo_real_usd)
+    c_social_mxn     = round(brecha_usd * factor_riesgo * TC_MXN, 2)
+
+    return (
+        c_social_mxn,
+        round(costo_real_usd  * TC_MXN, 2),
+        round(costo_digno_usd * TC_MXN, 2),
+    )
+
+
+def calcular_c_social(
+    empresa: dict,
+    prenda:  dict,
+) -> tuple[float, float, float, float, dict]:
+    """
+    Calcula el C_social como promedio PONDERADO por distribución de manufactura.
+
+    Args:
+        empresa: dict con 'manufactura' {ISO3: fracción} y 'nombre'
+        prenda:  dict con 'horas_manufactura'
+
+    Returns:
+        (c_social_ponderado, costo_real_ponderado, costo_digno_ponderado,
+         factor_riesgo_promedio, desglose_por_pais)
+
+    desglose_por_pais: {ISO3: {c_social, fraccion, pais_nombre}} — para el dashboard
+    """
+    manufactura       = empresa["manufactura"]
+    horas_manufactura = prenda["horas_manufactura"]
+
+    c_social_total    = 0.0
+    costo_real_total  = 0.0
+    costo_digno_total = 0.0
+    factor_prom       = 0.0
+    desglose          = {}
+
+    for iso, fraccion in manufactura.items():
+        c_s, c_r, c_d   = _c_social_pais(iso, horas_manufactura)
+        factor           = get_factor_riesgo_pais(iso)
+        sal              = SALARIOS_PAIS.get(iso, {})
+
+        c_social_total   += c_s * fraccion
+        costo_real_total += c_r * fraccion
+        costo_digno_total+= c_d * fraccion
+        factor_prom      += factor * fraccion
+
+        desglose[iso] = {
+            "pais_nombre":      sal.get("pais_nombre", iso),
+            "fraccion_pct":     round(fraccion * 100),
+            "c_social":         round(c_s, 2),
+            "factor_riesgo":    factor,
+            "sal_minimo_usd":   sal.get("salario_minimo_usd", "?"),
+            "sal_digno_usd":    sal.get("salario_digno_usd",  "?"),
+        }
+
+    return (
+        round(c_social_total,    2),
+        round(costo_real_total,  2),
+        round(costo_digno_total, 2),
+        round(factor_prom,       2),
+        desglose,
+    )
