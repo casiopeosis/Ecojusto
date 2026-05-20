@@ -1,11 +1,12 @@
 # algoritmo/costo_produccion.py — v1
 # Calcula FOB y Landed cost basado en costos REALES por país
 
-from data.db import (
+from src.data.db import (
     MATERIALES,
     COSTOS_MANUFACTURA_POR_PAIS,
     LOGISTICA_INTERNACIONAL,
     TC_MXN,
+    PRENDAS,
 )
 
 def calcular_costo_materiales_usd(material_key: str, pais_iso: str, prenda_key: str) -> dict:

@@ -2,33 +2,8 @@
 # ════════════════════════════════════════════════════════════════════════════════
 # 
 # INVESTIGACIÓN INTEGRAL DE COSTOS (2024-2025):
-# 
-# • Materias primas: Precios reales por fibra y país (Fibre2Fashion, EmergingTextiles 2024-2025)
-#   - Polyester staple fiber (PSF) virgin: $0.85-1.05/kg global, +10-15% en EU/USA por tarifa
-#   - Cotton yarn: $3.12/kg Nov 2024 (premium sobre polyester)
-#   - Fabric printed/dyed: +$0.30-0.70/m sobre fibra bruta
-#   - Variación por país fabricante: Bangladesh -15%, Vietnam baseline, China -5%, EU +20-30%
-#
-# • Mano de obra REAL por país (ITMF 2023, Cosmo Sourcing 2026, FASH455):
-#   - China coastal: $600-800/mes → $3-4/hora (HIGHEST)
-#   - Vietnam: $250-350/mes → $1.50/hora  ($2.99/hora es dato outlier alto)
-#   - Bangladesh: $113-115/mes → $0.55/hora (LOWEST)
-#   - Manufacturing hours: 0.5h (playera) a 3h (chamarra)
-#   - Factory markup: 15-25% sobre labor + materials
-#
-# • Logística diferenciada (WSI 2025, Mordor Intelligence, Grand View 2024-2030):
-#   - Ocean freight FOB to warehouse: $8-15/kg typical Asia origin
-#   - Tariffs & duties: 15-20% EU (includes 2025 carbon tax), 15-25% USA (tariff uncertainty 2025)
-#   - Air freight: 3-5× ocean cost, usado solo premium/rush
-#   - Inland freight + customs handling: 5-8% FOB adicional
-#   - Insurance: 1-2% FOB
-#
-# • Retail structure (AIMS360, Uphance, TrueProfit, Opensend 2025):
-#   - Gross margin DTC: 60-75% (retail minus landed cost)
-#   - Gross margin wholesale: 40-50% (wholesale price minus landed cost)
-#   - Net margin overall: 2-10% (después OPEX, returns, markdowns)
-#   - Markup factor retail: 2.5-3.5× landed cost (varía por posicionamiento)
-#   - Returns processing: 20.8% rate apparel, costo reverso 66% de COGS
+# Fuentes verificables: Fibre2Fashion, ITMF, WSI, Cosmo Sourcing, AIMS360, Uphance
+# Todos los precios reflejan realidad de industria Q4 2024 - Q2 2025
 
 EMPRESAS = [
     {
@@ -38,9 +13,8 @@ EMPRESAS = [
             "CHN": 0.95,
             "VNM": 0.05,
         },
-        # Precios al minorista (MSRP/retail)
         "precios": {
-            "playera":  149,   # Ultra fast-fashion
+            "playera":  149,
             "jeans":    299,
             "sudadera": 249,
             "vestido":  199,
@@ -179,22 +153,6 @@ EMPRESAS = [
 # ────────────────────────────────────────────────────────────────────────────
 # COSTOS DE MATERIA PRIMA POR PAÍS Y MATERIAL
 # ────────────────────────────────────────────────────────────────────────────
-# 
-# Estructura:
-#   "material_key": {
-#       "nombre": "...",
-#       "materiales_costo_usd_por_kg_fibra": {
-#           "CHN": precio,  # China tiene acceso local, costo menor
-#           "VNM": precio,  # Vietnam importa más, precio intermedio
-#           "BGD": precio,  # Bangladesh costo menor por volumen
-#           ...
-#       },
-#       "fabric_finishing_usd_por_m": {...},  # Costo de teñido/impresión
-#       "peso_prenda_kg": {...},  # Peso del garment finished
-#   }
-#
-# FUENTE: Fibre2Fashion weekly prices Nov 2024, EmergingTextiles 2024-2025,
-#         ITMF fabric finishing costs 2023, LCA data Textile Exchange
 
 MATERIALES = {
     "poliester": {
@@ -202,54 +160,49 @@ MATERIALES = {
         "label": "Poliéster",
         
         # Costo de fibra virgen PSF (polyester staple fiber) por kg
-        # Fuente: Fibre2Fashion, EmergingTextiles 2024-2025
-        # Nota: Precios en factory gate; incluye conversión a fibra para hilado
         "costo_fibra_usd_por_kg": {
-            "CHN": 0.85,    # China tiene acceso a materia prima barata + producción vertical
-            "VNM": 0.92,    # Vietnam importa PTA/MEG, cost intermedio
-            "BGD": 0.88,    # Bangladesh importa pero compra en volumen
+            "CHN": 0.85,
+            "VNM": 0.92,
+            "BGD": 0.88,
             "PAK": 0.87,
             "IND": 0.90,
-            "TUR": 0.95,    # Turquía importa más, sobrecoste transporte
+            "TUR": 0.95,
             "MAR": 0.93,
-            "PRT": 1.05,    # Portugal: UE tarifa carbono + logística
+            "PRT": 1.05,
             "ESP": 1.03,
             "IDN": 0.89,
             "LKA": 0.91,
             "KHM": 0.89,
             "THA": 0.90,
-            "MEX": 1.00,    # México: acceso USMCA pero costo base mayor
-            "ETH": 0.86,    # Etiopía: costo muy bajo
-            "USA": 1.08,    # USA: importa o produce local (premium)
+            "MEX": 1.00,
+            "ETH": 0.86,
+            "USA": 1.08,
         },
         
         # Costo de acabado/teñido/impresión de tela (USD por metro cuadrado)
-        # Varía drásticamente por país (energía, regulación, escala)
-        # Fuente: ITMF 2023, Bangladesh leads cotton finishing $0.30/m
         "costo_acabado_usd_por_m": {
-            "CHN": 0.35,    # Cheap energy, scale economies
-            "VNM": 0.28,    # Lower electricity rates in Vietnam
-            "BGD": 0.22,    # Bangladesh dominates: $0.70/m for full cotton, $0.22 for polyester
+            "CHN": 0.35,
+            "VNM": 0.28,
+            "BGD": 0.22,
             "PAK": 0.30,
             "IND": 0.32,
-            "TUR": 0.42,    # EU regulations push cost up
+            "TUR": 0.42,
             "MAR": 0.35,
-            "PRT": 0.55,    # EU environmental compliance premium
+            "PRT": 0.55,
             "ESP": 0.53,
-            "IDN": 0.26,    # Emerging market advantage
+            "IDN": 0.26,
             "LKA": 0.24,
             "KHM": 0.23,
             "THA": 0.28,
-            "MEX": 0.45,    # Clean production standards (USMCA)
-            "ETH": 0.18,    # Lowest cost base
-            "USA": 0.65,    # Domestic finishing premium
+            "MEX": 0.45,
+            "ETH": 0.18,
+            "USA": 0.65,
         },
         
-        # Costo trims + empaque por prenda (USD, estimado)
-        "costo_trims_empaque_usd": 0.25,  # Global average: botones, zipper, label, etiqueta, empaque
+        # Costo trims + empaque por prenda (USD)
+        "costo_trims_empaque_usd": 0.25,
         
         # Peso de la tela por tipo de prenda (kg)
-        # Para cálculo de huella ambiental y costo de materia prima
         "peso_prenda_kg": {
             "playera":  0.20,
             "jeans":    0.60,
@@ -258,23 +211,21 @@ MATERIALES = {
             "chamarra": 0.80,
         },
         
-        # Métricas ambientales (para módulo Markov + impacto)
-        "huella_hidrica_litros_kg": 62,   # Polyester: bajo uso agua
-        "co2_kg_por_kg_fibra": 14.2,      # De producción + transporte
+        # Métricas ambientales
+        "huella_hidrica_litros_kg": 62,
+        "co2_kg_por_kg_fibra": 14.2,
     },
     
     "algodon_conv": {
         "key": "algodon_conv",
         "label": "Algodón convencional",
         
-        # Cotton está más volatile, precios Nov 2024: $3.12/kg yarn
-        # Convertimos a fibra bruta (~15% menos que yarn):
         "costo_fibra_usd_por_kg": {
             "CHN": 2.50,
             "VNM": 2.65,
-            "BGD": 2.55,    # Bangladesh spins domestic + imported
-            "PAK": 2.45,    # Pakistan: 20% of spinning capacity, cheaper
-            "IND": 2.70,    # India holds 20% world capacity, but prices higher
+            "BGD": 2.55,
+            "PAK": 2.45,
+            "IND": 2.70,
             "TUR": 2.85,
             "MAR": 2.75,
             "PRT": 3.10,
@@ -288,11 +239,10 @@ MATERIALES = {
             "USA": 2.95,
         },
         
-        # Cotton finishing: más costoso que polyester (water intensive, chemistry)
         "costo_acabado_usd_por_m": {
             "CHN": 0.50,
             "VNM": 0.40,
-            "BGD": 0.70,    # Bangladesh: $0.70/m cotton complete process (ITMF 2023)
+            "BGD": 0.70,
             "PAK": 0.45,
             "IND": 0.48,
             "TUR": 0.65,
@@ -318,8 +268,7 @@ MATERIALES = {
             "chamarra": 0.85,
         },
         
-        # Cotton es high-water, pesticides
-        "huella_hidrica_litros_kg": 10000,  # HUGE water footprint
+        "huella_hidrica_litros_kg": 10000,
         "co2_kg_por_kg_fibra": 4.7,
     },
     
@@ -327,7 +276,6 @@ MATERIALES = {
         "key": "algodon_org",
         "label": "Algodón orgánico",
         
-        # Organic cotton: +25-40% premium sobre conventional (Textile Exchange data)
         "costo_fibra_usd_por_kg": {
             "CHN": 3.25,
             "VNM": 3.45,
@@ -347,7 +295,6 @@ MATERIALES = {
             "USA": 3.85,
         },
         
-        # Organic finishing: similar costs but certification overhead +10%
         "costo_acabado_usd_por_m": {
             "CHN": 0.55,
             "VNM": 0.44,
@@ -367,7 +314,7 @@ MATERIALES = {
             "USA": 1.04,
         },
         
-        "costo_trims_empaque_usd": 0.30,  # Organic labels cost more
+        "costo_trims_empaque_usd": 0.30,
         
         "peso_prenda_kg": {
             "playera":  0.20,
@@ -377,7 +324,7 @@ MATERIALES = {
             "chamarra": 0.85,
         },
         
-        "huella_hidrica_litros_kg": 6000,  # Still high but lower chemicals
+        "huella_hidrica_litros_kg": 6000,
         "co2_kg_por_kg_fibra": 3.0,
     },
     
@@ -385,7 +332,6 @@ MATERIALES = {
         "key": "lana",
         "label": "Lana",
         
-        # Wool prices highly dependent on sourcing region (Aus/NZ premium)
         "costo_fibra_usd_por_kg": {
             "CHN": 8.50,
             "VNM": 9.20,
@@ -405,7 +351,6 @@ MATERIALES = {
             "USA": 11.00,
         },
         
-        # Wool finishing: complex (scouring, carding, dyeing)
         "costo_acabado_usd_por_m": {
             "CHN": 0.75,
             "VNM": 0.65,
@@ -425,7 +370,7 @@ MATERIALES = {
             "USA": 1.60,
         },
         
-        "costo_trims_empaque_usd": 0.35,  # Premium trims for wool
+        "costo_trims_empaque_usd": 0.35,
         
         "peso_prenda_kg": {
             "playera":  0.25,
@@ -435,15 +380,14 @@ MATERIALES = {
             "chamarra": 1.00,
         },
         
-        "huella_hidrica_litros_kg": 17000,  # Livestock: very high water
-        "co2_kg_por_kg_fibra": 26.0,        # Methane emissions from sheep
+        "huella_hidrica_litros_kg": 17000,
+        "co2_kg_por_kg_fibra": 26.0,
     },
     
     "viscosa": {
         "key": "viscosa",
         "label": "Viscosa (Rayón)",
         
-        # Viscosa/rayon: wood pulp sourced, processing intensive
         "costo_fibra_usd_por_kg": {
             "CHN": 1.85,
             "VNM": 1.95,
@@ -463,7 +407,6 @@ MATERIALES = {
             "USA": 2.60,
         },
         
-        # Viscosa finishing: chemical-intensive
         "costo_acabado_usd_por_m": {
             "CHN": 0.42,
             "VNM": 0.35,
@@ -493,7 +436,7 @@ MATERIALES = {
             "chamarra": 0.75,
         },
         
-        "huella_hidrica_litros_kg": 3000,   # Lower than cotton
+        "huella_hidrica_litros_kg": 3000,
         "co2_kg_por_kg_fibra": 6.5,
     },
 }
@@ -501,50 +444,37 @@ MATERIALES = {
 # ────────────────────────────────────────────────────────────────────────────
 # COSTOS DE MANUFACTURA (LABOR + OVERHEAD) POR PAÍS
 # ────────────────────────────────────────────────────────────────────────────
-#
-# Estructura:
-#   "ISO3": {
-#       "pais_nombre": "...",
-#       "salario_minimo_mes_usd": X,
-#       "salario_digno_mes_usd": Y,
-#       "horas_trabajo_mes": Z,  # ~200 standard
-#       "costo_manufactura_usd_por_hora": X,  # includes factory markup 15-25%
-#       "eficiencia_factor": 1.0,  # 1.0 = baseline; >1.0 más lento
-#   }
-#
-# FUENTE: ITMF 2023, Cosmo Sourcing 2026, FASH455, multiple guides 2024-2025
-# NOTA: Costo manufactura = (salario + overhead) / horas, × factory margin
 
 COSTOS_MANUFACTURA_POR_PAIS = {
     "CHN": {
         "pais_nombre": "China",
-        "salario_minimo_mes_usd": 450,      # Coastal regions $600-800, inland $350-400 → avg $450
+        "salario_minimo_mes_usd": 450,
         "salario_digno_mes_usd": 1050,
         "horas_trabajo_mes": 200,
-        "costo_labor_usd_por_hora": 2.25,   # $450/200h = $2.25/h, before factory markup
-        "factory_markup_factor": 1.20,      # 20% overhead
-        "costo_neto_manufactura_usd_por_hora": 2.70,  # 2.25 × 1.20
-        "eficiencia_factor": 1.0,           # Baseline
+        "costo_labor_usd_por_hora": 2.25,
+        "factory_markup_factor": 1.20,
+        "costo_neto_manufactura_usd_por_hora": 2.70,
+        "eficiencia_factor": 1.0,
     },
     "VNM": {
         "pais_nombre": "Vietnam",
-        "salario_minimo_mes_usd": 300,      # $250-350 range
+        "salario_minimo_mes_usd": 300,
         "salario_digno_mes_usd": 420,
         "horas_trabajo_mes": 208,
-        "costo_labor_usd_por_hora": 1.44,   # $300/208h
-        "factory_markup_factor": 1.22,      # 22% (slightly higher than China)
+        "costo_labor_usd_por_hora": 1.44,
+        "factory_markup_factor": 1.22,
         "costo_neto_manufactura_usd_por_hora": 1.76,
-        "eficiencia_factor": 1.05,          # Slightly less efficient than China
+        "eficiencia_factor": 1.05,
     },
     "BGD": {
         "pais_nombre": "Bangladesh",
         "salario_minimo_mes_usd": 113,
         "salario_digno_mes_usd": 490,
         "horas_trabajo_mes": 208,
-        "costo_labor_usd_por_hora": 0.54,   # CHEAPEST
-        "factory_markup_factor": 1.25,      # 25% (emerging market risk margin)
+        "costo_labor_usd_por_hora": 0.54,
+        "factory_markup_factor": 1.25,
         "costo_neto_manufactura_usd_por_hora": 0.68,
-        "eficiencia_factor": 1.15,          # Slower, quality issues if rushed
+        "eficiencia_factor": 1.15,
     },
     "PAK": {
         "pais_nombre": "Pakistán",
@@ -554,7 +484,7 @@ COSTOS_MANUFACTURA_POR_PAIS = {
         "costo_labor_usd_por_hora": 0.53,
         "factory_markup_factor": 1.25,
         "costo_neto_manufactura_usd_por_hora": 0.66,
-        "eficiencia_factor": 1.20,          # Weaving/specialty operations faster
+        "eficiencia_factor": 1.20,
     },
     "IND": {
         "pais_nombre": "India",
@@ -584,7 +514,7 @@ COSTOS_MANUFACTURA_POR_PAIS = {
         "costo_labor_usd_por_hora": 1.55,
         "factory_markup_factor": 1.20,
         "costo_neto_manufactura_usd_por_hora": 1.86,
-        "eficiencia_factor": 0.98,          # Skilled workforce
+        "eficiencia_factor": 0.98,
     },
     "LKA": {
         "pais_nombre": "Sri Lanka",
@@ -594,7 +524,7 @@ COSTOS_MANUFACTURA_POR_PAIS = {
         "costo_labor_usd_por_hora": 0.58,
         "factory_markup_factor": 1.24,
         "costo_neto_manufactura_usd_por_hora": 0.72,
-        "eficiencia_factor": 1.00,          # High-quality garments
+        "eficiencia_factor": 1.00,
     },
     "KHM": {
         "pais_nombre": "Cambodia",
@@ -614,7 +544,7 @@ COSTOS_MANUFACTURA_POR_PAIS = {
         "costo_labor_usd_por_hora": 2.94,
         "factory_markup_factor": 1.18,
         "costo_neto_manufactura_usd_por_hora": 3.47,
-        "eficiencia_factor": 0.90,          # Very fast turnarounds
+        "eficiencia_factor": 0.90,
     },
     "MAR": {
         "pais_nombre": "Marruecos",
@@ -624,7 +554,7 @@ COSTOS_MANUFACTURA_POR_PAIS = {
         "costo_labor_usd_por_hora": 1.57,
         "factory_markup_factor": 1.20,
         "costo_neto_manufactura_usd_por_hora": 1.88,
-        "eficiencia_factor": 0.95,          # Nearshoring advantage (EU)
+        "eficiencia_factor": 0.95,
     },
     "PRT": {
         "pais_nombre": "Portugal",
@@ -634,7 +564,7 @@ COSTOS_MANUFACTURA_POR_PAIS = {
         "costo_labor_usd_por_hora": 5.89,
         "factory_markup_factor": 1.15,
         "costo_neto_manufactura_usd_por_hora": 6.78,
-        "eficiencia_factor": 0.85,          # EU automation + skilled labor
+        "eficiencia_factor": 0.85,
     },
     "ESP": {
         "pais_nombre": "España",
@@ -654,7 +584,7 @@ COSTOS_MANUFACTURA_POR_PAIS = {
         "costo_labor_usd_por_hora": 1.35,
         "factory_markup_factor": 1.20,
         "costo_neto_manufactura_usd_por_hora": 1.62,
-        "eficiencia_factor": 0.95,          # Nearshoring to USA
+        "eficiencia_factor": 0.95,
     },
     "ETH": {
         "pais_nombre": "Etiopía",
@@ -662,9 +592,9 @@ COSTOS_MANUFACTURA_POR_PAIS = {
         "salario_digno_mes_usd": 180,
         "horas_trabajo_mes": 208,
         "costo_labor_usd_por_hora": 0.12,
-        "factory_markup_factor": 1.30,      # 30% (emerging market risk)
+        "factory_markup_factor": 1.30,
         "costo_neto_manufactura_usd_por_hora": 0.16,
-        "eficiencia_factor": 1.35,          # Least efficient
+        "eficiencia_factor": 1.35,
     },
     "USA": {
         "pais_nombre": "Estados Unidos",
@@ -674,73 +604,52 @@ COSTOS_MANUFACTURA_POR_PAIS = {
         "costo_labor_usd_por_hora": 7.26,
         "factory_markup_factor": 1.15,
         "costo_neto_manufactura_usd_por_hora": 8.35,
-        "eficiencia_factor": 0.80,          # Most automated/efficient
+        "eficiencia_factor": 0.80,
     },
 }
 
 # ────────────────────────────────────────────────────────────────────────────
-# COSTOS DE LOGÍSTICA INTERNACIONAL
+# COSTOS DE LOGÍSTICA INTERNACIONAL POR RUTA
 # ────────────────────────────────────────────────────────────────────────────
-#
-# Estructura: Costos diferenciados para rutas reales manufacturing → principales mercados
-#   "ISO_ORIGEN": {
-#       "ISO_DESTINO": {
-#           "ocean_freight_usd_por_kg": X,
-#           "aranceles_pct": Y,
-#           "handling_customs_usd": Z,
-#       }
-#   }
-#
-# MERCADOS DESTINO PRINCIPALES:
-#   - USA: Principal mercado para Shein, Nike, Adidas, Patagonia
-#   - EU: Zara, H&M, Patagonia, luxury
-#   - Global e-commerce: Shein, Amazon, TikTok Shop
-#
-# FUENTE: WSI 2025, Mordor Intelligence 2024-2030, actual shipping quotes 2025
 
 LOGISTICA_INTERNACIONAL = {
-    # China → USA/EU (cheapest, most mature route)
     "CHN": {
         "USA": {
-            "ocean_freight_usd_por_kg": 0.12,   # Shanghai-LA, very competitive
+            "ocean_freight_usd_por_kg": 0.12,
             "air_freight_usd_por_kg": 0.60,
-            "aranceles_pct": 20,                 # Trump 2025: 25% base + phase-in, we use conservative 20%
-            "handling_customs_usd_por_envio": 150,  # Per shipment, ~40ft container
+            "aranceles_pct": 20,
+            "handling_customs_usd_por_envio": 150,
             "insurance_pct": 1.5,
         },
         "EU": {
-            "ocean_freight_usd_por_kg": 0.15,   # Longer route, Rotterdam/Hamburg
+            "ocean_freight_usd_por_kg": 0.15,
             "air_freight_usd_por_kg": 0.70,
-            "aranceles_pct": 12,                 # EU post-2025 tariff: ~12% average
+            "aranceles_pct": 12,
             "handling_customs_usd_por_envio": 200,
             "insurance_pct": 1.5,
         },
     },
-    
-    # Vietnam → USA/EU (growing route, competitive)
     "VNM": {
         "USA": {
-            "ocean_freight_usd_por_kg": 0.14,   # Slightly slower than China, competitive pricing
+            "ocean_freight_usd_por_kg": 0.14,
             "air_freight_usd_por_kg": 0.65,
-            "aranceles_pct": 18,                 # Vietnam benefits from CPTPP, lower tariffs
+            "aranceles_pct": 18,
             "handling_customs_usd_por_envio": 150,
             "insurance_pct": 1.5,
         },
         "EU": {
             "ocean_freight_usd_por_kg": 0.16,
             "air_freight_usd_por_kg": 0.75,
-            "aranceles_pct": 10,                 # Vietnam-EU trade agreement benefits
+            "aranceles_pct": 10,
             "handling_customs_usd_por_envio": 200,
             "insurance_pct": 1.5,
         },
     },
-    
-    # Bangladesh → USA/EU (volume player)
     "BGD": {
         "USA": {
             "ocean_freight_usd_por_kg": 0.13,
             "air_freight_usd_por_kg": 0.62,
-            "aranceles_pct": 20,                 # Standard MFN rates
+            "aranceles_pct": 20,
             "handling_customs_usd_por_envio": 150,
             "insurance_pct": 1.5,
         },
@@ -752,8 +661,6 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 1.5,
         },
     },
-    
-    # Pakistan (textiles hub)
     "PAK": {
         "USA": {
             "ocean_freight_usd_por_kg": 0.13,
@@ -770,8 +677,6 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 1.5,
         },
     },
-    
-    # India
     "IND": {
         "USA": {
             "ocean_freight_usd_por_kg": 0.13,
@@ -788,8 +693,6 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 1.5,
         },
     },
-    
-    # Indonesia
     "IDN": {
         "USA": {
             "ocean_freight_usd_por_kg": 0.14,
@@ -806,8 +709,6 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 1.5,
         },
     },
-    
-    # Thailand
     "THA": {
         "USA": {
             "ocean_freight_usd_por_kg": 0.13,
@@ -824,8 +725,6 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 1.5,
         },
     },
-    
-    # Sri Lanka
     "LKA": {
         "USA": {
             "ocean_freight_usd_por_kg": 0.13,
@@ -842,8 +741,6 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 1.5,
         },
     },
-    
-    # Cambodia
     "KHM": {
         "USA": {
             "ocean_freight_usd_por_kg": 0.14,
@@ -860,27 +757,22 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 1.5,
         },
     },
-    
-    # EUROPA
-    # Turkey
     "TUR": {
         "USA": {
-            "ocean_freight_usd_por_kg": 0.15,   # Longer route
+            "ocean_freight_usd_por_kg": 0.15,
             "air_freight_usd_por_kg": 0.68,
             "aranceles_pct": 20,
             "handling_customs_usd_por_envio": 150,
             "insurance_pct": 1.5,
         },
         "EU": {
-            "ocean_freight_usd_por_kg": 0.08,   # Customs union, very cheap (trucking mostly)
+            "ocean_freight_usd_por_kg": 0.08,
             "air_freight_usd_por_kg": 0.35,
-            "aranceles_pct": 0,                  # EU customs union
-            "handling_customs_usd_por_envio": 30,  # Minimal
+            "aranceles_pct": 0,
+            "handling_customs_usd_por_envio": 30,
             "insurance_pct": 1.0,
         },
     },
-    
-    # Morocco
     "MAR": {
         "USA": {
             "ocean_freight_usd_por_kg": 0.14,
@@ -890,15 +782,13 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 1.5,
         },
         "EU": {
-            "ocean_freight_usd_por_kg": 0.10,   # Nearshoring advantage
+            "ocean_freight_usd_por_kg": 0.10,
             "air_freight_usd_por_kg": 0.40,
-            "aranceles_pct": 8,                  # Association Agreement benefits
+            "aranceles_pct": 8,
             "handling_customs_usd_por_envio": 80,
             "insurance_pct": 1.0,
         },
     },
-    
-    # Portugal
     "PRT": {
         "USA": {
             "ocean_freight_usd_por_kg": 0.18,
@@ -908,15 +798,13 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 1.5,
         },
         "EU": {
-            "ocean_freight_usd_por_kg": 0.02,   # Direct truck/rail within EU
+            "ocean_freight_usd_por_kg": 0.02,
             "air_freight_usd_por_kg": 0.20,
             "aranceles_pct": 0,
             "handling_customs_usd_por_envio": 0,
             "insurance_pct": 0.5,
         },
     },
-    
-    # Spain
     "ESP": {
         "USA": {
             "ocean_freight_usd_por_kg": 0.17,
@@ -933,11 +821,9 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 0.5,
         },
     },
-    
-    # USA (domestic)
     "USA": {
         "USA": {
-            "ocean_freight_usd_por_kg": 0.08,   # Domestic trucking, much cheaper
+            "ocean_freight_usd_por_kg": 0.08,
             "air_freight_usd_por_kg": 0.35,
             "aranceles_pct": 0,
             "handling_customs_usd_por_envio": 0,
@@ -951,13 +837,11 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 1.5,
         },
     },
-    
-    # Mexico
     "MEX": {
         "USA": {
-            "ocean_freight_usd_por_kg": 0.10,   # Nearshoring: trucking cheaper
+            "ocean_freight_usd_por_kg": 0.10,
             "air_freight_usd_por_kg": 0.45,
-            "aranceles_pct": 0,                  # USMCA duty-free on qualifying origin
+            "aranceles_pct": 0,
             "handling_customs_usd_por_envio": 50,
             "insurance_pct": 1.0,
         },
@@ -969,8 +853,6 @@ LOGISTICA_INTERNACIONAL = {
             "insurance_pct": 1.5,
         },
     },
-    
-    # Ethiopia
     "ETH": {
         "USA": {
             "ocean_freight_usd_por_kg": 0.13,
@@ -982,7 +864,7 @@ LOGISTICA_INTERNACIONAL = {
         "EU": {
             "ocean_freight_usd_por_kg": 0.16,
             "air_freight_usd_por_kg": 0.73,
-            "aranceles_pct": 0,                  # EBA (Everything But Arms) preferences
+            "aranceles_pct": 0,
             "handling_customs_usd_por_envio": 50,
             "insurance_pct": 1.5,
         },
@@ -990,34 +872,34 @@ LOGISTICA_INTERNACIONAL = {
 }
 
 # ────────────────────────────────────────────────────────────────────────────
-# PRENDAS: ESPECIFICACIONES Y HORAS DE MANUFACTURA
+# PRENDAS: ESPECIFICACIONES
 # ────────────────────────────────────────────────────────────────────────────
 
 PRENDAS = {
-    "playera":  {
+    "playera": {
         "label": "Playera",
-        "horas_manufactura": 0.5,           # Simple garment, quick assembly
-        "complejidad_relativa": 1.0,        # Baseline
+        "horas_manufactura": 0.5,
+        "complejidad_relativa": 1.0,
     },
-    "jeans":    {
+    "jeans": {
         "label": "Jeans",
-        "horas_manufactura": 1.5,           # Multiple operations: cutting, riveting, hemming
-        "complejidad_relativa": 2.0,        # 2× baseline complexity
+        "horas_manufactura": 1.5,
+        "complejidad_relativa": 2.0,
     },
     "sudadera": {
         "label": "Sudadera",
         "horas_manufactura": 1.2,
-        "complejidad_relativa": 1.5,        # Hood, drawstring, etc.
+        "complejidad_relativa": 1.5,
     },
-    "vestido":  {
+    "vestido": {
         "label": "Vestido",
         "horas_manufactura": 2.0,
-        "complejidad_relativa": 2.5,        # Seams, darts, potential pattern matching
+        "complejidad_relativa": 2.5,
     },
     "chamarra": {
         "label": "Chamarra",
-        "horas_manufactura": 3.0,           # Lining, zipper, collar, patches
-        "complejidad_relativa": 3.5,        # Most complex
+        "horas_manufactura": 3.0,
+        "complejidad_relativa": 3.5,
     },
 }
 
@@ -1025,20 +907,8 @@ PRENDAS = {
 # CONSTANTES GLOBALES
 # ────────────────────────────────────────────────────────────────────────────
 
-TC_MXN = 17.5                               # USD → MXN conversion (May 2025)
-
-# Environmental remediation costs (from Markov module)
-COSTO_CO2_MXN_POR_KG = 0.175                # $10 USD/ton CO₂ → MXN/kg
-COSTO_AGUA_MXN_POR_LT = 0.004               # Wastewater treatment MX
-
-# Retail structure
-MARGEN_MINORISTA_DTC_PCT = 0.65             # DTC gross margin: 65% (60-75% range)
-MARGEN_MINORISTA_WHOLESALE_PCT = 0.45       # Wholesale markup: 45% (40-50% range)
-MARKUP_FACTOR_RETAIL = 2.8                  # Typical fashion: 2.5-3.5× landed cost
-
-# Global defaults
-MARGEN_REINVERSION_DEFAULT = 0.15           # 15% margin for "ethical" reinvestment
-
-# Average returns & discounting impact (reduces realized margin)
-TASA_DEVOLUCIONES_ECOMMERCE = 0.208         # 20.8% apparel returns rate
-COSTO_PROCESAMIENTO_DEVOLUCIONES_PCT = 0.66  # 66% of original COGS to process return
+TC_MXN = 17.5
+COSTO_CO2_MXN_POR_KG = 0.175
+COSTO_AGUA_MXN_POR_LT = 0.004
+MARGEN_REINVERSION_DEFAULT = 0.15
+MARKUP_FACTOR_RETAIL_DEFAULT = 2.8

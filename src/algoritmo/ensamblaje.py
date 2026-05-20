@@ -1,10 +1,51 @@
-# algoritmo/ensamblaje.py — v5+
+# algoritmo/ensamblaje.py — v5 (REFACTORED WITH REAL COSTS)
+# ════════════════════════════════════════════════════════════════════════════════
+# Ensamblaje final de P_justo incorporando:
+# 1. Costo de producción REAL (FOB + Landed)
+# 2. Costos ambientales (Markov)
+# 3. Costos sociales (Juegos + Banco Mundial)
+# 4. Penalización opacidad (KL divergence)
+# 5. Markups minoristas realistas
 
-from algoritmo.costo_produccion import calcular_fob, calcular_landed_cost
-from algoritmo.opacidad import calcular_alpha
-from algoritmo.markov import calcular_c_ambiental
-from algoritmo.social import calcular_c_social
-from data.db import MARKUP_FACTOR_RETAIL, MARGEN_REINVERSION_DEFAULT
+from src.data.db import (
+    EMPRESAS,
+    MATERIALES,
+    PRENDAS,
+    TC_MXN,
+    MARGEN_REINVERSION_DEFAULT,
+    MARKUP_FACTOR_RETAIL_DEFAULT,
+)
+from costo_produccion import (
+    calcular_landed_cost_ponderado,
+    calcular_fob_ponderado,
+)
+from opacidad import calcular_alpha
+from markov import calcular_c_ambiental
+from social import calcular_c_social
+
+
+def _badge(transparencia: float) -> str:
+    """Categoría de transparencia (baja, media, alta)."""
+    if transparencia >= 0.70:
+        return "alta"
+    elif transparencia >= 0.40:
+        return "media"
+    return "baja"
+
+
+def _veredicto(precio_etiqueta: float, p_justo: float) -> str:
+    """Veredicto sobre alineación de precios."""
+    ratio = precio_etiqueta / max(p_justo, 1)
+    if ratio < 0.60:
+        return "externaliza"
+    elif ratio < 0.90:
+        return "subestimado"
+    elif ratio <= 1.15:
+        return "alineado"
+    elif ratio <= 1.50:
+        return "margen_alto"
+    else:
+        return "sobreprecio"
 
 
 def calcular_precio_justo(
@@ -12,132 +53,140 @@ def calcular_precio_justo(
     material: dict,
     prenda: dict,
     prenda_key: str,
-    mercado_destino: str = "USA",  # Nuevo parámetro
+    mercado_destino: str = "USA",
     margen: float = MARGEN_REINVERSION_DEFAULT,
+    markup_retail: float = MARKUP_FACTOR_RETAIL_DEFAULT,
 ) -> dict:
     """
-    Calcula P_justo con estructura REAL de costos.
+    Calcula P_justo con estructura COMPLETA y REALISTA de costos.
     
-    Flujo:
-    1. FOB = materiales + labor (variable por país)
-    2. Landed = FOB + logística (variable por ruta)
-    3. C_ambiental = ciclo de vida (Markov)
-    4. C_social = brecha salarial (Juegos)
-    5. α_e = penalización opacidad (KL)
-    6. P_justo = (Landed + C_amb + C_soc) × α_e × markup_retail × (1 + margen)
+    Args:
+        empresa: dict empresa (nombre, manufactura, precios, transparencia)
+        material: dict material (costos fibra, acabado, huellas)
+        prenda: dict prenda (horas, complejidad)
+        prenda_key: key de prenda ("playera", "jeans", etc.)
+        mercado_destino: "USA" o "EU"
+        margen: Margen de reinversión (ej. 0.15 = 15%)
+        markup_retail: Factor markup minorista (ej. 2.8)
+    
+    Returns:
+        dict amplio con todos los costos y métricas
     """
     
-    # ─── CAPA 1: Costo de producción ─────────────────────────────────────
-    # Calcular FOB ponderado por país de manufactura
-    fob_ponderado = 0.0
-    desglose_fob = {}
+    # ─── CAPA 1: COSTO DE PRODUCCIÓN (FOB + Landed) ───────────────────────
     
-    for pais_iso, fraccion_manufactura in empresa["manufactura"].items():
-        fob_calc = calcular_fob(material["key"], prenda_key, pais_iso)
-        fob_unitario = fob_calc["fob_usd"]
-        fob_ponderado += fob_unitario * fraccion_manufactura
-        
-        desglose_fob[pais_iso] = {
-            "fob": fob_unitario,
-            "fraccion": fraccion_manufactura,
-            "aporte": fob_unitario * fraccion_manufactura,
-        }
+    # FOB ponderado (fabricación multi-país)
+    fob_result = calcular_fob_ponderado(material["key"], prenda_key, empresa["manufactura"])
+    fob_ponderado_usd = fob_result["fob_ponderado_usd"]
+    desglose_fob = fob_result["desglose_por_pais"]
     
-    # Calcular Landed cost ponderado
-    peso_kg = material["peso_prenda_kg"].get(prenda_key, 0.30)
-    landed_ponderado = 0.0
-    desglose_landed = {}
+    # Landed cost ponderado
+    landed_result = calcular_landed_cost_ponderado(
+        material["key"],
+        prenda_key,
+        empresa["manufactura"],
+        mercado_destino,
+    )
+    landed_ponderado_usd = landed_result["landed_cost_ponderado_usd"]
+    desglose_landed = landed_result["desglose_por_pais"]
     
-    for pais_iso, fraccion in empresa["manufactura"].items():
-        landed_calc = calcular_landed_cost(
-            fob_calc_for_pais = desglose_fob[pais_iso]["fob"],
-            pais_origen_iso = pais_iso,
-            mercado_destino = mercado_destino,
-            peso_kg = peso_kg,
-        )
-        landed_ponderado += landed_calc["landed_cost_usd"] * fraccion
-        desglose_landed[pais_iso] = landed_calc
+    # ─── CAPA 2-5: EXTERNALIDADES + OPACIDAD ─────────────────────────────
     
-    # ─── CAPA 2-4: Costos de externalidades (como antes) ─────────────────
+    # Opacidad (KL divergence)
     alpha = calcular_alpha(empresa["transparencia"])
+    
+    # Ambiental (Markov)
     vida_util, c_ambiental, c_agua, c_co2 = calcular_c_ambiental(
-        empresa["transparencia"], material, prenda_key
+        empresa["transparencia"],
+        material,
+        prenda_key,
     )
+    
+    # Social (Teoría de juegos)
     c_social, c_lab_real, c_lab_digno, factor_prom, desglose_paises = calcular_c_social(
-        empresa, prenda
+        empresa,
+        prenda,
     )
     
-    # ─── CAPA 5: Ensamblaje ────────────────────────────────────────────
-    # Convertir USD a MXN para reporte
-    TC_MXN = 17.5  # De db.py
+    # ─── CONVERSIÓN A MXN ──────────────────────────────────────────────────
     
-    landed_mxn = landed_ponderado * TC_MXN
+    landed_mxn = landed_ponderado_usd * TC_MXN
     c_ambiental_mxn = c_ambiental
     c_social_mxn = c_social * TC_MXN
     
-    # Costo base REAL (sin margen, sin penalización opacidad aún)
-    costo_base = landed_mxn + c_ambiental_mxn + c_social_mxn
+    # ─── ENSAMBLAJE FINAL ──────────────────────────────────────────────────
     
-    # Aplicar penalización opacidad ANTES de multiplicar por markup retail
-    penalizacion_opacidad_mxn = (alpha - 1) * costo_base
-    costo_con_opacidad = costo_base * alpha
+    # Costo base: landed + externalidades (sin opacidad aún)
+    costo_base_mxn = landed_mxn + c_ambiental_mxn + c_social_mxn
+    
+    # Aplicar penalización opacidad
+    penalizacion_opacidad_mxn = (alpha - 1) * costo_base_mxn
+    costo_con_opacidad_mxn = costo_base_mxn * alpha
     
     # Aplicar margen de reinversión (sostenibilidad)
-    margen_reinversion = costo_con_opacidad * margen
+    margen_reinversion_mxn = costo_con_opacidad_mxn * margen
     
-    # Aplicar markup minorista (factor 2.5-3.5× depending on positioning)
-    # Patagonia: 3.0×, Nike: 2.8×, Shein: 2.2×
-    markup_retail = MARKUP_FACTOR_RETAIL.get(empresa["nombre"], 2.8)
-    p_justo_final = (costo_con_opacidad + margen_reinversion) * markup_retail
+    # Aplicar markup retail
+    p_justo_mxn = (costo_con_opacidad_mxn + margen_reinversion_mxn) * markup_retail
     
-    # ─── Comparativa con precio etiqueta ────────────────────────────────
+    # ─── COMPARATIVA CON ETIQUETA ──────────────────────────────────────────
+    
     precio_etiqueta = empresa["precios"][prenda_key]
-    brecha = precio_etiqueta - p_justo_final
+    brecha_mxn = precio_etiqueta - p_justo_mxn
     
-    def _veredicto(etiqueta, justo):
-        ratio = etiqueta / max(justo, 1)
-        if ratio < 0.60:    return "externaliza"
-        elif ratio < 0.90:  return "subestimado"
-        elif ratio <= 1.15: return "alineado"
-        elif ratio <= 1.50: return "margen_alto"
-        else:               return "sobreprecio"
+    # ─── RESULTADO FINAL ───────────────────────────────────────────────────
     
     return {
-        # Identidad
+        # IDENTIDAD
         "empresa": empresa["nombre"],
         "material": material["label"],
         "prenda": prenda["label"],
+        "mercado_destino": mercado_destino,
+        
+        # TRANSPARENCIA
         "transparencia_pct": round(empresa["transparencia"] * 100),
+        "nivel": _badge(empresa["transparencia"]),
+        "alpha_opacidad": round(alpha, 4),
         
-        # Precio etiqueta vs justo
+        # PRECIO ETIQUETA vs JUSTO
         "precio_etiqueta_mxn": precio_etiqueta,
-        "p_justo_mxn": round(p_justo_final),
-        "brecha_mxn": round(brecha),
-        "veredicto": _veredicto(precio_etiqueta, p_justo_final),
+        "p_justo_mxn": round(p_justo_mxn),
+        "brecha_mxn": round(brecha_mxn),
+        "ratio_etiqueta_justo": round(precio_etiqueta / max(p_justo_mxn, 1), 1),
+        "veredicto": _veredicto(precio_etiqueta, p_justo_mxn),
         
-        # Desglose de costos (NUEVA INFORMACIÓN)
-        "landed_cost_usd": round(landed_ponderado, 2),
+        # DESGLOSE COSTO DE PRODUCCIÓN
+        "landed_cost_usd": round(landed_ponderado_usd, 2),
         "landed_cost_mxn": round(landed_mxn),
-        "desglose_fob": desglose_fob,
-        "desglose_landed": desglose_landed,
+        "fob_ponderado_usd": round(fob_ponderado_usd, 2),
+        "desglose_fob_por_pais": desglose_fob,
+        "desglose_landed_por_pais": desglose_landed,
         
-        # Externalidades
-        "c_laboral_digno_mxn": round(c_lab_digno * TC_MXN),
+        # DESGLOSE EXTERNALIDADES
         "c_ambiental_mxn": round(c_ambiental_mxn),
         "c_agua_mxn": round(c_agua),
         "c_co2_mxn": round(c_co2),
         "c_social_mxn": round(c_social_mxn),
+        "c_laboral_digno_mxn": round(c_lab_digno * TC_MXN),
+        "factor_riesgo_prom": factor_prom,
+        "desglose_paises_social": desglose_paises,
         
-        # Penalizaciones y márgenes
-        "alpha_opacidad": round(alpha, 4),
+        # DESGLOSE ENSAMBLAJE
+        "costo_base_mxn": round(costo_base_mxn),
         "penalizacion_opacidad_mxn": round(penalizacion_opacidad_mxn),
-        "margen_reinversion_mxn": round(margen_reinversion),
+        "costo_con_opacidad_mxn": round(costo_con_opacidad_mxn),
+        "margen_reinversion_pct": round(margen * 100, 1),
+        "margen_reinversion_mxn": round(margen_reinversion_mxn),
         "factor_markup_retail": markup_retail,
         
-        # Metadata
+        # AMBIENTAL
         "vida_util_meses": vida_util,
-        "factor_riesgo_prom": factor_prom,
-        "desglose_paises": desglose_paises,
+        "huella_hidrica_litros": round(material["huella_hidrica_litros_kg"] * material["peso_prenda_kg"].get(prenda_key, 0.30)),
+        "co2_kg": round(material["co2_kg_por_kg_fibra"] * material["peso_prenda_kg"].get(prenda_key, 0.30), 2),
+        
+        # MANUFACTURA
+        "paises_manufactura": list(empresa["manufactura"].keys()),
+        "n_paises_manufactura": len(empresa["manufactura"]),
     }
 
 
@@ -146,15 +195,34 @@ def run_all(
     prenda_key: str,
     mercado_destino: str = "USA",
     margen: float = MARGEN_REINVERSION_DEFAULT,
+    markup_retail: float = MARKUP_FACTOR_RETAIL_DEFAULT,
 ) -> list[dict]:
-    """Corre cálculo para todas las empresas."""
+    """
+    Calcula P_justo para todas las empresas con los mismos parámetros.
+    
+    Args:
+        material_key: "poliester", "algodon_conv", etc.
+        prenda_key: "playera", "jeans", etc.
+        mercado_destino: "USA" o "EU"
+        margen: Margen de reinversión
+        markup_retail: Factor markup minorista
+    
+    Returns:
+        Lista de dicts (uno por empresa), ordenada por brecha (externalizadores primero)
+    """
+    
+    if material_key not in MATERIALES:
+        raise ValueError(f"Material '{material_key}' not found.")
+    if prenda_key not in PRENDAS:
+        raise ValueError(f"Prenda '{prenda_key}' not found.")
+    
     mat = MATERIALES[material_key]
     pre = PRENDAS[prenda_key]
     
     resultados = [
-        calcular_precio_justo(e, mat, pre, prenda_key, mercado_destino, margen)
+        calcular_precio_justo(e, mat, pre, prenda_key, mercado_destino, margen, markup_retail)
         for e in EMPRESAS
     ]
     
-    # Ordenar por brecha (mayores externalizadores primero)
+    # Ordenar por brecha: mayores externalizadores primero
     return sorted(resultados, key=lambda x: x["brecha_mxn"])
