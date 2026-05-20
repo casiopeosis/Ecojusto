@@ -1,4 +1,12 @@
-# algoritmo/ensamblaje.py — v5 (REFACTORED WITH REAL COSTS)
+# algoritmo/ensamblaje.py — v6 (CORREGIDO - PRECIOS REALISTAS)
+# ════════════════════════════════════════════════════════════════════════════════
+# Ensamblaje final de P_justo incorporando:
+# 1. Costo de producción REAL (FOB + Landed con Markup Comercial exclusivo)
+# 2. Costos ambientales (Markov con factor de reposición)
+# 3. Costos sociales (Juegos + Banco Mundial)
+# 4. Penalización opacidad (KL divergence)
+# 5. Markups minoristas aplicados únicamente sobre el costo logístico/fábrica
+
 from src.data.db import (
     EMPRESAS,
     MATERIALES,
@@ -7,8 +15,6 @@ from src.data.db import (
     MARGEN_REINVERSION_DEFAULT,
     MARKUP_FACTOR_RETAIL_DEFAULT,
 )
-
-# Importaciones relativas corregidas y mapeadas con las funciones reales de costo_produccion.py
 from .costo_produccion import (
     calcular_landed_cost,
     calcular_fob,
@@ -52,11 +58,10 @@ def calcular_precio_justo(
     markup_retail: float = MARKUP_FACTOR_RETAIL_DEFAULT,
 ) -> dict:
     """
-    Calcula P_justo con estructura COMPLETA y REALISTA de costos.
+    Calcula P_justo con una estructura desinflada y balanceada de costos.
     """
 
     # ─── CAPA 1: COSTO DE PRODUCCIÓN (FOB + Landed Ponderados) ────────────
-    # Como la empresa opera multi-país, iteramos sobre su distribución para calcular los ponderados
     fob_ponderado_usd = 0.0
     landed_ponderado_usd = 0.0
     desglose_fob = {}
@@ -65,7 +70,6 @@ def calcular_precio_justo(
     peso_kg = material["peso_prenda_kg"].get(prenda_key, 0.30)
 
     for pais_iso, fraccion in empresa["manufactura"].items():
-        # Cálculo unitario por país usando tu módulo costo_produccion
         res_fob = calcular_fob(material["key"], prenda_key, pais_iso)
         res_landed = calcular_landed_cost(
             res_fob["fob_usd"], pais_iso, mercado_destino, peso_kg
@@ -82,7 +86,7 @@ def calcular_precio_justo(
     # Opacidad (KL divergence)
     alpha = calcular_alpha(empresa["transparencia"])
 
-    # Ambiental (Markov)
+    # Ambiental (Markov recalibrado con factor de reposición)
     vida_util, c_ambiental, c_agua, c_co2 = calcular_c_ambiental(
         empresa["transparencia"],
         material,
@@ -95,26 +99,27 @@ def calcular_precio_justo(
         prenda,
     )
 
-    # ─── CONVERSIÓN A MXN ──────────────────────────────────────────────────
+    # ─── CONVERSIÓN A MXN Y COMA COMERCIAL (FIX BUG MULTIPLICADOR) ───────
 
+    # El Markup Comercial (2.8x) SOLO afecta al costo de traer la prenda de fábrica (Landed)
     landed_mxn = landed_ponderado_usd * TC_MXN
+    precio_retail_base_mxn = landed_mxn * markup_retail
+
     c_ambiental_mxn = c_ambiental
     c_social_mxn = c_social * TC_MXN
 
-    # ─── ENSAMBLAJE FINAL ──────────────────────────────────────────────────
+    # Bloque ético: Sumamos el valor comercial real + los costos socioambientales internalizados
+    costo_base_etico_mxn = precio_retail_base_mxn + c_ambiental_mxn + c_social_mxn
 
-    # Costo base: landed + externalidades (sin opacidad aún)
-    costo_base_mxn = landed_mxn + c_ambiental_mxn + c_social_mxn
+    # Aplicar penalización de opacidad informacional sobre el bloque ético
+    penalizacion_opacidad_mxn = (alpha - 1) * costo_base_etico_mxn
+    costo_con_opacidad_mxn = costo_base_etico_mxn * alpha
 
-    # Aplicar penalización opacidad
-    penalizacion_opacidad_mxn = (alpha - 1) * costo_base_mxn
-    costo_con_opacidad_mxn = costo_base_mxn * alpha
-
-    # Aplicar margen de reinversión (sostenibilidad)
+    # Aplicar margen de reinversión para fondos de sustentabilidad
     margen_reinversion_mxn = costo_con_opacidad_mxn * margen
 
-    # Aplicar markup retail
-    p_justo_mxn = (costo_con_opacidad_mxn + margen_reinversion_mxn) * markup_retail
+    # P_justo Final balanceado y desinflado
+    p_justo_mxn = costo_con_opacidad_mxn + margen_reinversion_mxn
 
     # ─── COMPARATIVA CON ETIQUETA ──────────────────────────────────────────
 
@@ -145,7 +150,7 @@ def calcular_precio_justo(
         "fob_ponderado_usd": round(fob_ponderado_usd, 2),
         "desglose_fob_por_pais": desglose_fob,
         "desglose_landed_por_pais": desglose_landed,
-        # DESGLOSE EXTERNALIDADES
+        # DESGLOSE EXTERNALIDADES (Pasan directo o ponderados adecuadamente)
         "c_ambiental_mxn": round(c_ambiental_mxn),
         "c_agua_mxn": round(c_agua),
         "c_co2_mxn": round(c_co2),
@@ -153,14 +158,16 @@ def calcular_precio_justo(
         "c_laboral_digno_mxn": round(c_lab_digno * TC_MXN),
         "factor_riesgo_prom": factor_prom,
         "desglose_paises_social": desglose_paises,
-        # DESGLOSE ENSAMBLAJE
-        "costo_base_mxn": round(costo_base_mxn),
+        # DESGLOSE ENSAMBLAJE (Para la gráfica de barras apiladas)
+        "costo_base_mxn": round(
+            precio_retail_base_mxn
+        ),  # Representa la barra de manufactura + retail tradicional
         "penalizacion_opacidad_mxn": round(penalizacion_opacidad_mxn),
         "costo_con_opacidad_mxn": round(costo_con_opacidad_mxn),
         "margen_reinversion_pct": round(margen * 100, 1),
         "margen_reinversion_mxn": round(margen_reinversion_mxn),
         "factor_markup_retail": markup_retail,
-        # AMBIENTAL
+        # AMBIENTAL MÈTRICAS CRUDAS
         "vida_util_meses": vida_util,
         "huella_hidrica_litros": round(material["huella_hidrica_litros_kg"] * peso_kg),
         "co2_kg": round(material["co2_kg_por_kg_fibra"] * peso_kg, 2),
@@ -195,5 +202,4 @@ def run_all(
         for e in EMPRESAS
     ]
 
-    # Ordenar por brecha: mayores externalizadores primero
     return sorted(resultados, key=lambda x: x["brecha_mxn"])

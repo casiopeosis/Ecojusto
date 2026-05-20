@@ -1,4 +1,4 @@
-# data/db.py  — v5 (COMPLETE COST STRUCTURE OVERHAUL)
+# data/db.py  — v6 (CALIBRADO Y COMPLETADO)
 # ════════════════════════════════════════════════════════════════════════════════
 #
 # INVESTIGACIÓN INTEGRAL DE COSTOS (2024-2025):
@@ -571,10 +571,15 @@ PRENDAS = {
 }
 
 # ────────────────────────────────────────────────────────────────────────────
-# CONSTANTES GLOBALES
+# CONSTANTES GLOBALES DE EXTERNALIDADES RECALIBRADAS (REPARACIÓN DE ESCALA)
 # ────────────────────────────────────────────────────────────────────────────
 
-COSTO_CO2_MXN_POR_KG = 0.175
-COSTO_AGUA_MXN_POR_LT = 0.004
+# Refleja el Costo Social Real del Carbono (EPA ~200 USD por tonelada)
+COSTO_CO2_MXN_POR_KG = 3.50
+
+# Refleja el costo real de remediación y purificación de agua con químicos pesados
+COSTO_AGUA_MXN_POR_LT = 0.25
+
+# Coeficientes comerciales minoristas y margen de sustentabilidad
 MARGEN_REINVERSION_DEFAULT = 0.15
 MARKUP_FACTOR_RETAIL_DEFAULT = 2.8

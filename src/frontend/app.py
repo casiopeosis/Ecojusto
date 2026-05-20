@@ -393,3 +393,64 @@ st.divider()
 st.caption(
     "EcoJusto AI — Proyecto académico de IA, 2025. Prototipo demostrativo con fuentes citadas."
 )
+
+
+# ── NUEVA SECCIÓN COMPLETA: SIMULACIONES AVANZADAS E INTELIGENCIA ARTIFICIAL ──
+st.markdown("---")
+st.header("🧠 Módulos Avanzados de Simulación e Inteligencia Artificial")
+
+tab_montecarlo, tab_genetico = st.tabs(
+    [
+        "🎲 Simulación Monte Carlo (Bono Carbono)",
+        "🧬 Algoritmo Genético (Frente de Pareto)",
+    ]
+)
+
+# ── PANE 1: MONTE CARLO ───────────────────────────────────────────────────────
+with tab_montecarlo:
+    st.subheader("🎲 Análisis de Estrés Industrial vía Monte Carlo")
+    st.caption(
+        "Simula 2,000 escenarios estocásticos variando los precios internacionales de CO₂ y remediación de agua para proyectar el punto de quiebre financiero del Fast Fashion."
+    )
+
+    col_mc1, col_mc2 = st.columns([1, 3])
+
+    with col_mc1:
+        empresa_mc = st.selectbox(
+            "Selecciona Marca a Auditar", [e["nombre"] for e in EMPRESAS]
+        )
+        st.info(
+            "Pregunta clave: ¿Cuánto tendría que subir el bono de carbono para que esta empresa no pueda seguir rentabilizando sus externalidades?"
+        )
+
+    # Correr la simulación al vuelo usando el nuevo módulo modular
+    from src.algoritmo.monte_carlo import simular_umbrales_co2
+
+    res_mc = simular_umbrales_co2(empresa_mc, material_key, prenda_key)
+
+    with col_mc2:
+        st.metric(
+            f"Punto de Quiebre de CO₂ (Percentil 90) para {empresa_mc}",
+            f"${res_mc['umbral_co2_percentil_90']} MXN/kg",
+            f"Inviable en el {res_mc['pct_escenarios_insostenible']}% de los escenarios futuros",
+        )
+
+        # Histograma de precios justos simulados
+        fig_hist = px.histogram(
+            x=res_mc["historico_precios_justos"],
+            nbins=30,
+            labels={
+                "x": "Precio Justo Simulado (MXN)",
+                "y": "Frecuencia de Escenarios",
+            },
+            title=f"Distribución del Precio Justo Calculado bajo Estrés Climático ({prenda_label} de {mat_label})",
+            color_discrete_sequence=["#8E44AD"],
+        )
+        fig_hist.add_vline(
+            x=res_mc["precio_etiqueta"],
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"Precio Etiqueta Real (${res_mc['precio_etiqueta']} MXN)",
+        )
+        fig_hist.update_layout(plot_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig_hist, use_container_width=True)
