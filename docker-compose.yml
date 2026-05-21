@@ -1,13 +1,11 @@
 version: "3.9"
-
 services:
-  ecojusto:
+  app:
     build: .
     ports:
       - "8501:8501"
-    env_file:
-      - .env
+    environment:
+      - PYTHONPATH=/app
     volumes:
-      # Hot-reload: cambios en el código se reflejan sin rebuild
-      - .:/app
-    restart: unless-stopped
+      - ./src:/app/src        # hot-reload en desarrollo
+      - ./frontend:/app/frontend
