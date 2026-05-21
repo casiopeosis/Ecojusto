@@ -1,414 +1,673 @@
-# EcoJusto AI 🌿
+# EcoJusto AI
 
-> **Auditor algorítmico de externalidades socioambientales en la industria de la moda**
+**Auditor algorítmico de externalidades socioambientales en la industria de la moda**
 
-EcoJusto AI es una herramienta de periodismo de datos que calcula el **precio justo real** de una prenda de ropa, revelando los costos ocultos que las marcas de moda trasladan a la sociedad y al medio ambiente. El sistema combina Teoría de la Información, Procesos de Decisión de Markov y Teoría de Juegos para producir un dashboard comparativo interactivo entre empresas para un material y prenda específicos.
-
----
-
-## Screenshot del output
-
-![Dashboard comparativo EcoJusto AI](https://placehold.co/900x480/1a1a2e/ffffff?text=EcoJusto+AI+%E2%80%94+Dashboard+Comparativo)
-
-> El dashboard muestra, para cada empresa: precio de etiqueta, costo ambiental (C_ambiental), costo social (C_social) y penalización por opacidad (α_e), apilados en una barra comparativa. La tabla inferior incluye vida útil estimada por Markov, índice de transparencia y semáforo de nivel ético.
+EcoJusto AI es un sistema de análisis cuantitativo que calcula el precio justo real de una prenda de ropa, revelando los costos externos que las marcas transfieren a la sociedad y al medio ambiente. El sistema integra Teoría de la Información, Procesos de Decisión de Markov, Teoría de Juegos, datos en tiempo real del Banco Mundial y simulaciones Monte Carlo para producir un dashboard interactivo comparativo entre empresas, parametrizado por material y tipo de prenda.
 
 ---
 
 ## Tabla de contenidos
 
-1. [Visión general](#visión-general)
-2. [Input y output del sistema](#input-y-output-del-sistema)
-3. [Arquitectura general](#arquitectura-general)
-4. [Módulo 1 — Opacidad (Teoría de la Información)](#módulo-1--opacidad-teoría-de-la-información)
-5. [Módulo 2 — Ciclo de vida (Cadenas de Markov)](#módulo-2--ciclo-de-vida-cadenas-de-markov)
-6. [Módulo 3 — Impacto social (Teoría de Juegos)](#módulo-3--impacto-social-teoría-de-juegos)
-7. [Ensamblaje: Precio Justo](#ensamblaje-precio-justo)
-8. [Bases de datos y fuentes](#bases-de-datos-y-fuentes)
-9. [Stack tecnológico](#stack-tecnológico)
-10. [Complejidad algorítmica](#complejidad-algorítmica)
-11. [Estructura del proyecto](#estructura-del-proyecto)
-12. [Instrucciones de instalación](#instrucciones-de-instalación)
-13. [Supuestos y limitaciones](#supuestos-y-limitaciones)
+1. [Propósito y contexto](#1-propósito-y-contexto)
+2. [Input y output del sistema](#2-input-y-output-del-sistema)
+3. [Arquitectura del sistema](#3-arquitectura-del-sistema)
+4. [Base de datos y fuentes](#4-base-de-datos-y-fuentes)
+5. [Módulo 1 — Costo de producción real (FOB + Landed Cost)](#5-módulo-1--costo-de-producción-real-fob--landed-cost)
+6. [Módulo 2 — Penalización por opacidad informacional (KL Divergence)](#6-módulo-2--penalización-por-opacidad-informacional-kl-divergence)
+7. [Módulo 3 — Costo ambiental por ciclo de vida (Cadenas de Markov)](#7-módulo-3--costo-ambiental-por-ciclo-de-vida-cadenas-de-markov)
+8. [Módulo 4 — Costo social y brecha salarial (Teoría de Juegos)](#8-módulo-4--costo-social-y-brecha-salarial-teoría-de-juegos)
+9. [Ensamblaje: cálculo del precio justo](#9-ensamblaje-cálculo-del-precio-justo)
+10. [Módulo 5 — Simulación Monte Carlo: sensibilidad al precio de carbono](#10-módulo-5--simulación-monte-carlo-sensibilidad-al-precio-de-carbono)
+11. [Módulo 6 — Simulación Monte Carlo: agotamiento hídrico acumulado](#11-módulo-6--simulación-monte-carlo-agotamiento-hídrico-acumulado)
+12. [Módulo 7 — Simulación Monte Carlo: reloj de deuda social](#12-módulo-7--simulación-monte-carlo-reloj-de-deuda-social)
+13. [Módulo LLM — Narrativa interpretativa](#13-módulo-llm--narrativa-interpretativa)
+14. [Complejidad algorítmica](#14-complejidad-algorítmica)
+15. [Stack tecnológico](#15-stack-tecnológico)
+16. [Estructura del proyecto](#16-estructura-del-proyecto)
+17. [Instrucciones de instalación](#17-instrucciones-de-instalación)
+18. [Supuestos, limitaciones y trabajo futuro](#18-supuestos-limitaciones-y-trabajo-futuro)
 
 ---
 
-## Visión general
+## 1. Propósito y contexto
 
-La industria de la moda es la segunda más contaminante del mundo. Una playera de poliéster vendida en $299 MXN puede representar externamente entre $600 y $1,400 MXN en costos ambientales y sociales no pagados: contaminación hídrica, emisiones de microplásticos, salarios por debajo del mínimo vital y cadenas de suministro opacas.
+La industria de la moda genera entre 4% y 8% de las emisiones globales de gases de efecto invernadero, consume aproximadamente 93,000 millones de metros cúbicos de agua al año y es responsable de una cadena de suministro donde los salarios pagados en países de manufactura se sitúan consistentemente por debajo del umbral de subsistencia definido por la Organización Internacional del Trabajo. Estos costos no aparecen en el precio de etiqueta: son externalizados hacia trabajadores, comunidades locales y el sistema climático global.
 
-EcoJusto AI cuantifica esos costos mediante tres módulos matemáticos independientes y los presenta en un dashboard comparativo que permite al usuario elegir un material y tipo de prenda, y ver cómo se comportan distintas empresas frente al mismo producto.
+EcoJusto AI cuantifica esas externalidades de forma sistemática y las traduce a la unidad de análisis más directa: el precio adicional que una prenda debería costar si la empresa que la produce internalizara el daño real que genera. El sistema no es un ejercicio de opinión; cada componente del precio justo se deriva de una metodología matemática con sustento en literatura académica y datos públicos verificables.
+
+El proyecto fue desarrollado como prototipo académico avanzado en el contexto de un curso de Inteligencia Artificial, con énfasis en la aplicación de técnicas formales de ML, matemáticas discretas y simulación estocástica a problemas de impacto social medible.
 
 ---
 
-## Input y output del sistema
+## 2. Input y output del sistema
 
 ### Input
 
-El sistema recibe tres parámetros del usuario a través del frontend:
+El sistema recibe dos parámetros del usuario a través del frontend Streamlit:
 
-| Parámetro | Tipo | Ejemplo | Descripción |
-|---|---|---|---|
-| `material` | `str` (enum) | `"poliester"` | Material principal de la prenda |
-| `prenda` | `str` (enum) | `"playera"` | Tipo de prenda |
-| *(empresas)* | interno | — | Se evalúan todas las empresas de la base de datos simultáneamente |
+| Parámetro | Tipo | Valores disponibles |
+|---|---|---|
+| `material_key` | `str` | `poliester`, `algodon_conv`, `algodon_org`, `lana`, `viscosa` |
+| `prenda_key` | `str` | `playera`, `jeans`, `sudadera`, `vestido`, `chamarra` |
 
-**Materiales disponibles:** poliéster, algodón convencional, algodón orgánico, lana, viscosa.
+Las ocho empresas de la base de datos se evalúan simultáneamente con los mismos parámetros.
 
-**Prendas disponibles:** playera, jeans, sudadera, vestido, chamarra.
+Los módulos Monte Carlo (Módulos 5, 6 y 7) aceptan parámetros adicionales a través del frontend: número de personas, prendas por persona por año y horizonte temporal en años.
 
-### Output
-
-Para cada empresa en la base de datos, el sistema devuelve un objeto con:
+### Output principal por empresa
 
 ```json
 {
   "empresa": "H&M",
-  "precio_etiqueta": 280,
-  "alpha_e": 1.41,
-  "c_ambiental": 32,
-  "c_social": 74,
-  "p_justo": 543,
-  "vida_util_meses": 8.7,
   "transparencia_pct": 62,
-  "nivel": "media"
+  "nivel": "media",
+  "alpha_opacidad": 1.147,
+  "precio_etiqueta_mxn": 349,
+  "p_justo_mxn": 7838,
+  "brecha_mxn": -7489,
+  "veredicto": "externaliza",
+  "fob_ponderado_usd": 4.21,
+  "landed_cost_usd": 9.18,
+  "landed_cost_mxn": 175,
+  "c_ambiental_mxn": 1240,
+  "c_social_mxn": 388,
+  "vida_util_meses": 5.8,
+  "huella_hidrica_litros": 620,
+  "co2_kg": 0.94
 }
 ```
 
-El frontend consume este JSON para renderizar:
+El veredicto categórico sigue la escala:
 
-- **Gráfica de barras apiladas** (precio etiqueta + C_ambiental + C_social + penalización opacidad) por empresa
-- **Tarjetas de métricas** (empresa más cara real, más transparente, brecha promedio)
-- **Tabla detallada** con semáforo de nivel ético por empresa
+| Ratio etiqueta / P_justo | Veredicto |
+|---|---|
+| < 0.60 | `externaliza` |
+| 0.60 – 0.90 | `subestimado` |
+| 0.90 – 1.15 | `alineado` |
+| 1.15 – 1.50 | `margen_alto` |
+| > 1.50 | `sobreprecio` |
 
 ---
 
-## Arquitectura general
+## 3. Arquitectura del sistema
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Frontend (Streamlit)                 │
-│   Select: material × prenda  →  Dashboard comparativo   │
-└───────────────────────┬─────────────────────────────────┘
-                        │ HTTP / función directa
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                  Backend Python / Docker                 │
-│                                                         │
-│  Input: (material_m, prenda_p)                          │
-│                        │                               │
-│         ┌──────────────▼──────────────┐                │
-│         │  Para cada empresa e en DB  │                │
-│         └──────────────┬──────────────┘                │
-│                        │                               │
-│    ┌───────────────────▼──────────────────────────┐    │
-│    │  Módulo 1: Opacidad — D_KL → α_e             │    │
-│    └───────────────────┬──────────────────────────┘    │
-│                        │                               │
-│    ┌───────────────────▼──────────────────────────┐    │
-│    │  Módulo 2: Markov — F=(I-Q)⁻¹ → C_ambiental │    │
-│    └───────────────────┬──────────────────────────┘    │
-│                        │                               │
-│    ┌───────────────────▼──────────────────────────┐    │
-│    │  Módulo 3: Juegos — Nash → C_social          │    │
-│    └───────────────────┬──────────────────────────┘    │
-│                        │                               │
-│    ┌───────────────────▼──────────────────────────┐    │
-│    │  P_justo = α_e · (P_com + C_amb + C_soc)     │    │
-│    └───────────────────┬──────────────────────────┘    │
-│                        │                               │
-│         Output: List[ResultadoEmpresa]                  │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-                        ▼
-              JSON → Plotly / Streamlit
+src/
+├── data/
+│   ├── db.py                        # Base de datos estática: EMPRESAS, MATERIALES, PRENDAS
+│   └── world_bank.py                # API Banco Mundial: indicadores laborales en tiempo real
+│
+└── algoritmo/
+    ├── opacidad.py                  # Módulo 2: D_KL → alpha_e
+    ├── markov.py                    # Módulo 3: Cadena absorbente + factor de reposición
+    ├── social.py                    # Módulo 4: brecha salarial ponderada por país
+    ├── costo_produccion.py          # Módulo 1: FOB + Landed Cost por país de manufactura
+    ├── ensamblaje.py                # Orquestación: P_justo para todas las empresas
+    ├── monte_carlo.py               # Módulo 5: sensibilidad al precio del bono CO2
+    ├── monte_carlo_hidrico.py       # Módulo 6: agotamiento hídrico acumulado
+    └── monte_carlo_deuda_social.py  # Módulo 7: reloj de deuda social
+
+frontend/
+└── app.py                           # Streamlit: sidebar, gráficas, tabs de simulación
+```
+
+El flujo de ejecución para cada empresa es secuencial y estrictamente acíclico:
+
+```
+db.py
+  └── costo_produccion.py   → FOB_ponderado, Landed_ponderado
+  └── opacidad.py           → alpha_e
+  └── markov.py             → vida_util, c_ambiental
+  └── social.py             ←── world_bank.py (API o fallback)
+                            → c_social
+  └── ensamblaje.py         → P_justo, veredicto, desglose completo
 ```
 
 ---
 
-## Módulo 1 — Opacidad (Teoría de la Información)
+## 4. Base de datos y fuentes
+
+### 4.1 Empresas
+
+Ocho empresas con distribución real de manufactura por país:
+
+| Empresa | FTI (%) | Distribución de manufactura (ISO3 : fracción) |
+|---|---|---|
+| Shein | 5 | CHN:0.95, VNM:0.05 |
+| Primark | 22 | BGD:0.45, IND:0.30, CHN:0.15, PAK:0.10 |
+| H&M | 62 | BGD:0.27, CHN:0.21, TUR:0.12, IND:0.10, otros |
+| Zara (Inditex) | 55 | PRT:0.20, ESP:0.15, MAR:0.18, TUR:0.14, otros |
+| Nike | 68 | VNM:0.50, IDN:0.25, CHN:0.14, THA:0.11 |
+| Adidas | 74 | VNM:0.27, IDN:0.19, CHN:0.16, otros |
+| Levi's | 70 | MEX:0.25, BGD:0.20, LKA:0.15, KHM:0.12, otros |
+| Patagonia | 92 | VNM:0.35, MEX:0.20, USA:0.15, LKA:0.15, otros |
+
+La distribución de manufactura es un promedio ponderado de fuentes públicas: informes de sostenibilidad de cada empresa (2023–2024), Fashion Transparency Index 2024 y análisis de la base de datos de importaciones de EE.UU. (USITC).
+
+### 4.2 Materiales
+
+| Material | Huella hídrica (L/kg) | CO2 (kg/kg fibra) | Peso playera (kg) |
+|---|---|---|---|
+| Poliéster | 62 | 14.2 | 0.20 |
+| Algodón convencional | 10,000 | 4.7 | 0.20 |
+| Algodón orgánico | 6,000 | 2.5 | 0.20 |
+| Lana | 17,000 | 18.5 | 0.40 |
+| Viscosa | 3,000 | 5.2 | 0.18 |
+
+Fuentes: Textile Exchange Preferred Fiber & Materials Report 2023; Quantis, Life Cycle Assessment of Apparel (2018); Common Objective, Fibre Briefing Series (2022).
+
+### 4.3 Salarios y datos laborales
+
+Datos de salario mínimo y salario digno para 16 países de manufactura, con fuente en:
+
+- OIT — ILOSTAT, módulo de salarios mínimos (edición 2023)
+- WageIndicator Foundation, Global Wage Database (2023–2024)
+- SEDLAC / CEPAL para países de América Latina
+
+Los datos de salario digno (*living wage*) siguen la metodología Anker de la Global Living Wage Coalition, que estima el salario necesario para cubrir alimentación, vivienda, atención médica, educación y un margen de ahorro modesto en cada contexto geográfico.
+
+### 4.4 Indicadores laborales en tiempo real
+
+El módulo `world_bank.py` consulta la API del Banco Mundial para dos indicadores:
+
+- `SL.EMP.VULN.ZS` — Empleo vulnerable como porcentaje del total (OIT)
+- `SL.UEM.TOTL.ZS` — Tasa de desempleo total
+
+El factor de riesgo laboral se calcula como:
+
+```
+factor = 0.7 × (vulnerabilidad / 50) + 0.3 × (desempleo / 5)
+```
+
+normalizado al rango [0.3, 2.0]. Si la API falla o no devuelve datos para el período solicitado, el sistema utiliza un diccionario de fallback calibrado manualmente con base en informes de la OIT y el Global Rights Index de la ITUC (2023).
+
+### 4.5 Fuentes de referencia completas
+
+| Fuente | Uso en el sistema |
+|---|---|
+| Fashion Transparency Index 2024 — Fashion Revolution | Índice de transparencia por empresa (0–100%) |
+| OIT — ILOSTAT, Wage Statistics | Salarios mínimos por país |
+| WageIndicator Foundation | Salarios dignos (metodología Anker) |
+| World Bank Open Data API | Vulnerabilidad laboral y desempleo en tiempo real |
+| ITUC Global Rights Index 2023 | Fallback del factor de riesgo laboral |
+| Textile Exchange — Preferred Fiber Report 2023 | Huellas hídricas y CO2 por fibra |
+| Quantis LCA of Apparel 2018 | Análisis de ciclo de vida por material |
+| Ellen MacArthur Foundation — A New Textiles Economy (2017) | Tasas de transición Markov y vida útil de prendas |
+| SACMEX / CONAGUA — Reporte Anual 2023 | Consumo anual de agua CDMX (referencia hídrica) |
+| FINA Technical Regulations 2022 | Volumen de alberca olímpica (referencia hídrica) |
+| CONAGUA — Informe Sistema Cutzamala 2023 | Capacidad útil Presa Cutzamala (referencia hídrica) |
+| IPCC AR6 — Working Group III (2022) | Rango de escenarios de precio de carbono |
+| Acuerdo de París — NDC Registry | Precio de carbono objetivo 2030 |
+| USITC — Import Statistics | Distribución de manufactura por país por empresa |
+| Informes de sostenibilidad corporativa 2023–2024 | Validación de distribución de manufactura |
+
+---
+
+## 5. Módulo 1 — Costo de producción real (FOB + Landed Cost)
 
 ### Objetivo
 
-Medir qué tan lejos está la empresa de reportar lo que debería reportar sobre su cadena de suministro, y castigar esa opacidad con un multiplicador de penalización.
+Calcular el costo real de fabricar una prenda, considerando fibra, acabado, mano de obra y logística internacional, ponderado por la distribución de manufactura de cada empresa entre múltiples países.
+
+### FOB (Free On Board)
+
+El FOB por país se descompone en tres componentes:
+
+**Costo de materiales:**
+
+```
+costo_fibra = precio_fibra[pais] × peso_kg
+costo_acabado = precio_acabado[pais] × (peso_kg × 1.3)  # factor densidad ~0.77 kg/m²
+costo_trims = constante por material
+costo_materiales = costo_fibra + costo_acabado + costo_trims
+```
+
+**Costo de manufactura (labor):**
+
+```
+costo_hora = salario_minimo_usd[pais] / horas_mes[pais]
+costo_labor = costo_hora × horas_manufactura[prenda]
+```
+
+**FOB total:**
+
+```
+FOB[pais] = costo_materiales + costo_labor
+```
+
+### Landed Cost
+
+El landed cost incorpora los costos de llevar la prenda desde la fábrica hasta el almacén del mercado destino:
+
+```
+ocean_freight = tarifa_por_kg[origen] × peso_kg
+aranceles     = FOB × arancel_pct[destino]     # 18% USA, 20% EU (promedio textil)
+handling      = costo_fijo / 1000               # amortizado por prenda
+insurance     = FOB × 1.5%
+inland        = (FOB + ocean + aranceles) × 5%
+
+landed_cost = FOB + ocean_freight + aranceles + handling + insurance + inland
+```
+
+### Ponderación por distribución de manufactura
+
+Dado que cada empresa fabrica en múltiples países con distintas fracciones:
+
+```
+FOB_ponderado   = Σ (FOB[pais_i] × fraccion_i)
+landed_ponderado = Σ (landed[pais_i] × fraccion_i)
+```
+
+Este promedio ponderado refleja que una empresa que produce 45% en Bangladesh y 30% en India tiene un costo de producción diferente a otra que produce 95% en China.
+
+---
+
+## 6. Módulo 2 — Penalización por opacidad informacional (KL Divergence)
 
 ### Fundamento matemático
 
-Se utiliza la **Divergencia de Kullback-Leibler (D_KL)**, también llamada entropía relativa. Esta métrica de la Teoría de la Información cuantifica cuánta información se "pierde" al aproximar una distribución real Q con una distribución ideal P.
+El módulo cuantifica la brecha entre el nivel ideal de divulgación corporativa y el nivel real de cada empresa, utilizando la **Divergencia de Kullback-Leibler**, métrica central de la Teoría de la Información (Shannon, 1948; Kullback y Leibler, 1951).
 
-$$D_{KL}(P \| Q_e) = \sum_{x \in X} P(x) \log\left(\frac{P(x)}{Q_e(x)}\right)$$
+La divergencia KL mide la información adicional necesaria para describir la distribución real Q a partir de la distribución de referencia P:
+
+$$D_{KL}(P \| Q_e) = \sum_{x \in \mathcal{X}} P(x) \log\left(\frac{P(x)}{Q_e(x)}\right)$$
 
 **Definición de distribuciones:**
 
-- `P(x)`: distribución ideal de reporte. Se define como la distribución uniforme sobre el conjunto de dimensiones que el Fashion Transparency Index evalúa: trazabilidad de fábricas, política salarial, huella hídrica, auditorías de terceros, política de género, etc. La empresa con mayor puntaje en el FTI actúa como proxy de P.
-- `Q_e(x)`: distribución real de la empresa `e`, derivada de su puntaje en el FTI (0–100%). Una empresa con 20% de transparencia concentra su masa de probabilidad en pocas dimensiones.
+- $P$: distribución ideal de reporte, modelada como distribución puntual en el máximo de transparencia (P = 1.0), representando a la empresa con mayor puntaje del Fashion Transparency Index como referencia normativa.
+- $Q_e$: distribución real de la empresa $e$, derivada de su puntaje FTI normalizado al rango (0, 1]. Una empresa con transparencia $\tau = 0.05$ como Shein asigna casi toda su masa de probabilidad a una fracción mínima de las dimensiones evaluadas.
+
+Bajo esta modelización escalar, la divergencia se reduce a:
+
+$$D_{KL}(P \| Q_e) = \log\left(\frac{1}{\tau_e}\right) = -\log(\tau_e)$$
 
 **Factor de penalización:**
 
-$$\alpha_e = 1 + \gamma \cdot D_{KL}(P \| Q_e)$$
+$$\alpha_e = 1 + \gamma \cdot D_{KL}(P \| Q_e) = 1 + \gamma \cdot (-\log(\tau_e))$$
 
-donde `γ = 0.3` es el parámetro de ajuste (calibrable). Si la empresa es totalmente transparente, `D_KL = 0` → `α_e = 1` (sin penalización).
+con $\gamma = 0.3$ como parámetro de escala (hiperparámetro calibrable).
 
-### Implementación
+**Propiedades:**
+- Si $\tau_e = 1.0$: $D_{KL} = 0 \Rightarrow \alpha_e = 1.0$ (sin penalización)
+- Si $\tau_e = 0.05$ (Shein): $D_{KL} \approx 3.0 \Rightarrow \alpha_e \approx 1.90$
+- Si $\tau_e = 0.92$ (Patagonia): $D_{KL} \approx 0.083 \Rightarrow \alpha_e \approx 1.025$
 
 ```python
-import numpy as np
-
 def calcular_alpha(transparencia: float, gamma: float = 0.3) -> float:
-    """
-    transparencia: float en [0, 1], índice FTI normalizado de la empresa
-    Retorna el factor multiplicador alpha_e
-    """
     p = 1.0
-    q = max(transparencia, 1e-9)  # evitar log(0)
+    q = max(transparencia, 1e-9)
     dkl = p * np.log(p / q)
-    return 1 + gamma * dkl
+    return round(1 + gamma * dkl, 4)
 ```
 
-### Complejidad
-
-- **Temporal:** O(|X|) donde |X| es el número de dimensiones evaluadas por el FTI (~10). Constante en la práctica.
-- **Espacial:** O(1)
+**Complejidad:** O(1) temporal y espacial.
 
 ---
 
-## Módulo 2 — Ciclo de vida (Cadenas de Markov)
+## 7. Módulo 3 — Costo ambiental por ciclo de vida (Cadenas de Markov)
 
 ### Objetivo
 
-Estimar cuánto tiempo durará la prenda antes de terminar en un vertedero, y traducir ese tiempo en un costo ambiental por ciclo de uso acortado.
+Estimar la vida útil esperada de una prenda mediante una cadena de Markov absorbente, y traducir esa duración en un costo de remediación ambiental escalado por el ritmo de reposición que el mercado impone.
 
-### Fundamento matemático
+### Espacio de estados y matriz de transición
 
-Se modela la vida útil de la prenda como una **Cadena de Markov Absorbente** con el siguiente espacio de estados:
+El ciclo de vida de una prenda se modela con tres estados:
 
-$$S = \{ \text{Activo},\ \text{Segunda Mano},\ \text{Basurero} \}$$
+$$\mathcal{S} = \{\text{Activo},\ \text{Segunda Mano},\ \text{Basurero}\}$$
 
-donde `Basurero` es el único estado absorbente. La dinámica está definida por la matriz de transición `T`, que depende de dos factores:
-
-1. **Material `m`:** durabilidad intrínseca (poliéster se degrada rápido; algodón orgánico dura más)
-2. **Empresa `e`:** calidad de manufactura, proxy del índice de transparencia
-
-**Ejemplo de matriz de transición para poliéster fast-fashion:**
+donde `Basurero` es el único estado absorbente. La dinámica está definida por:
 
 ```
-             Activo   2a Mano   Basurero
-Activo      [ 0.20,    0.10,     0.70  ]
-2a Mano     [ 0.00,    0.30,     0.70  ]
-Basurero    [ 0.00,    0.00,     1.00  ]
+Q = submatriz de estados transitorios (Activo y Segunda Mano):
+    [ p_activo    p_segunda ]
+    [ 0.0         p_2a_activo ]
 ```
 
-**Cálculo del tiempo esperado hasta absorción** usando la **Matriz Fundamental de Kemeny**:
+Las probabilidades de transición base $p_{\text{basurero}}$ se calibran por material:
+
+| Material | $p_{\text{basurero}}$ base |
+|---|---|
+| Poliéster | 0.73 |
+| Algodón convencional | 0.57 |
+| Algodón orgánico | 0.40 |
+| Lana | 0.25 |
+| Viscosa | 0.65 |
+
+El factor de calidad ajusta la probabilidad de descarte según la transparencia de la empresa (proxy de calidad de manufactura):
+
+```
+calidad = 0.5 + transparencia × 0.5
+factor_calidad = (calidad - 0.5) / 0.5
+p_basurero = p_base × (1 - factor_calidad × 0.40)
+```
+
+### Vida útil esperada mediante la Matriz Fundamental de Kemeny
+
+La vida útil esperada en estados transitorios se calcula mediante la inversa de $(I - Q)$:
 
 $$F = (I - Q)^{-1}$$
 
-donde `Q` es la submatriz de estados transitorios (Activo y Segunda Mano). El vector de tiempos esperados es:
-
-$$\mathbf{t} = F \cdot \mathbf{1}$$
-
-El primer componente `t[0]` da el número esperado de ciclos antes de que una prenda en estado Activo llegue al Basurero.
-
-**Costo ambiental:**
-
-$$C_{\text{ambiental}} = \frac{\text{Costo de Remediación Estándar}(m)}{E[T]}$$
-
-A menor vida útil esperada `E[T]`, mayor frecuencia de reposición y mayor huella ecológica acumulada.
-
-### Implementación
+El vector de tiempos esperados hasta absorción es $\mathbf{t} = F \cdot \mathbf{1}$. La vida útil de la prenda es el primer elemento de $\mathbf{t}$ (tiempo esperado desde el estado Activo):
 
 ```python
-import numpy as np
-
-def calcular_c_ambiental(transparencia: float, material: dict) -> tuple[float, float]:
-    """
-    Retorna (vida_util_meses, c_ambiental_mxn)
-    material: dict con keys 'vida_base' (meses) y 'costo_remediacion' (MXN)
-    """
-    calidad = 0.5 + transparencia * 0.5  # [0.5, 1.0]
-    vida_esperada = material['vida_base'] * calidad
-
-    # Matriz Q (estados transitorios: Activo, Segunda Mano)
-    p_activo_a_basurero = max(0.05, 0.95 - calidad * 0.8)
-    Q = np.array([
-        [0.20 * calidad, 0.10],
-        [0.00,           0.30 * calidad]
-    ])
-    I = np.eye(2)
-    F = np.linalg.inv(I - Q)
-    t = F @ np.ones(2)
-    vida_markov = round(t[0], 1)
-
-    c_ambiental = round(material['costo_remediacion'] / vida_markov)
-    return vida_markov, c_ambiental
+F = np.linalg.inv(np.eye(2) - Q)
+vida_util = float((F @ np.ones(2))[0])
 ```
 
-### Complejidad
+**Complejidad:** O(n³) para la inversión matricial, con n = 2 (constante en la práctica → O(1)).
 
-- **Temporal:** O(n³) por la inversión de matriz, donde n=2 (estados transitorios). Constante en la práctica.
-- **Espacial:** O(n²) para almacenar Q y F.
+### Factor de reposición y costo ambiental
+
+Una vida útil corta implica que el consumidor repone la prenda con mayor frecuencia, multiplicando el impacto ambiental real del ciclo de producción. Se define una vida útil de referencia de 24 meses como estándar de durabilidad:
+
+```
+factor_reposicion = max(1.0, 24 / vida_util)
+```
+
+Los costos de remediación por prenda se calculan como:
+
+```
+c_agua = (huella_hidrica_L_kg × peso_kg) × COSTO_AGUA_MXN_POR_LT × factor_reposicion
+c_co2  = (co2_kg_por_kg × peso_kg)       × COSTO_CO2_MXN_POR_KG  × factor_reposicion
+c_ambiental = c_agua + c_co2
+```
+
+Los precios de remediación actuales ($COSTO\_CO2 = 3.50$ MXN/kg, $COSTO\_AGUA = 0.25$ MXN/L) son la base deterministadel módulo. Los Módulos 5 y 6 exploran el espacio de incertidumbre alrededor de estos valores.
 
 ---
 
-## Módulo 3 — Impacto social (Teoría de Juegos)
+## 8. Módulo 4 — Costo social y brecha salarial (Teoría de Juegos)
 
-### Objetivo
+### Fundamento
 
-Estimar el costo financiero necesario para resarcir las condiciones laborales en la cadena de suministro, modelando la relación empresa–maquiladora como un juego estratégico.
+El módulo cuantifica la externalidad laboral como la brecha entre el costo real de producción (salario mínimo pagado) y el costo de producción socialmente justo (salario digno), ponderada por el riesgo institucional del país de manufactura. Conceptualmente, esto formaliza el problema de la cadena de suministro como un juego asimétrico de información donde la empresa captura el excedente de la brecha salarial a expensas del trabajador.
 
-### Fundamento matemático
+### Cálculo por país
 
-La relación entre la corporación y sus proveedores en países en desarrollo se modela como un **Dilema del Prisionero Repetido**:
+Para cada país de manufactura:
 
-| | Maquiladora coopera | Maquiladora defecciona |
-|---|---|---|
-| **Empresa coopera** | (salario digno, estabilidad) | (empresa pierde, maquiladora gana) |
-| **Empresa defecciona** | (empresa gana, maquiladora pierde) | (equilibrio de explotación) |
+```
+costo_hora_real  = salario_minimo_usd[pais] / horas_mes[pais]
+costo_hora_digno = salario_digno_usd[pais] / horas_mes[pais]
 
-En el equilibrio de Nash estático, la estrategia dominante para empresas de moda masiva es **defeccionar** (explotar vacíos legales para reducir costos laborales), dado que el mercado premia el precio bajo.
+costo_real_usd  = costo_hora_real  × horas_manufactura[prenda]
+costo_digno_usd = costo_hora_digno × horas_manufactura[prenda]
 
-**Costo de Estabilización Social:**
+brecha_usd        = max(0, costo_digno_usd - costo_real_usd)
+factor_riesgo     = get_factor_riesgo_pais(iso)   # API Banco Mundial
+c_social_pais_mxn = brecha_usd × factor_riesgo × TC_MXN
+```
 
-Equivale a la penalización financiera teórica requerida para alterar la matriz de pagos del juego, haciendo que la cooperación sea la estrategia dominante:
+El factor de riesgo amplifica la brecha para países con mayor informalidad, represión sindical o vulnerabilidad laboral, y la reduce para países con instituciones laborales sólidas (factor mínimo: 0.30 para economías de alta protección).
 
-$$C_{\text{social}} = P_{\text{base}} \times \text{FactorRiesgoPaís} \times \text{BrechaSalarialOIT}$$
+### Ponderación por distribución de manufactura
+
+```
+c_social_total = Σ (c_social[pais_i] × fraccion_i)
+```
+
+Esta ponderación diferencia matemáticamente a empresas con distintas geografías de manufactura. Shein (95% China, factor_riesgo = 1.75) tiene un costo social diferente a Patagonia (15% USA, factor_riesgo = 0.30; 35% Vietnam, 1.40; etc.).
+
+---
+
+## 9. Ensamblaje: cálculo del precio justo
+
+### Estructura de costos
+
+El precio justo se construye en capas:
+
+**Capa 1 — Base comercial (manufactura + logística + margen retail):**
+
+```
+precio_retail_base_mxn = landed_ponderado_usd × TC_MXN × markup_retail
+```
+
+El `markup_retail` (por defecto 2.8×) representa el margen acumulado de intermediación entre el costo de manufactura y el precio al consumidor, calibrado con base en datos de la industria del fast fashion.
+
+**Capa 2 — Externalidades:**
+
+```
+c_ambiental_mxn  (del Módulo 3)
+c_social_mxn     (del Módulo 4, convertido a MXN)
+```
+
+**Capa 3 — Penalización por opacidad:**
+
+```
+costo_base_etico = precio_retail_base + c_ambiental + c_social
+costo_con_opacidad = costo_base_etico × alpha_e
+```
+
+**Capa 4 — Margen de reinversión para sustentabilidad:**
+
+```
+margen_reinversion = costo_con_opacidad × margen   # default 15%
+P_justo = costo_con_opacidad + margen_reinversion
+```
+
+### Fórmula completa
+
+$$P_{\text{justo}} = \alpha_e \cdot \left( P_{\text{retail}} + C_{\text{ambiental}} + C_{\text{social}} \right) \cdot (1 + m)$$
 
 donde:
-- `P_base`: precio base de la prenda (valor fijo por tipo, no el precio de etiqueta — evita circularidad)
-- `FactorRiesgoPaís`: índice de riesgo laboral del país principal de manufactura (fuente: CSI Global Rights Index)
-- `BrechaSalarialOIT`: brecha porcentual entre salario pagado y salario digno estimado por la OIT para ese país
+- $\alpha_e = 1 + 0.3 \cdot (-\log(\tau_e))$
+- $P_{\text{retail}} = \text{landed\_usd} \times TC \times \mu_{\text{retail}}$
+- $C_{\text{ambiental}} = (c_{\text{agua}} + c_{\text{co2}}) \times f_{\text{repos}}$
+- $C_{\text{social}} = \sum_i \text{brecha}_i \times f_{\text{riesgo},i} \times w_i \times TC$
+- $m = 0.15$ (margen de reinversión por defecto)
 
-### Implementación
-
-```python
-def calcular_c_social(empresa: dict, prenda: dict) -> float:
-    """
-    empresa: dict con 'pais_riesgo' (factor 0.0–2.0)
-    prenda: dict con 'precio_base' y 'brecha_oit'
-    """
-    c_social = prenda['precio_base'] * empresa['pais_riesgo'] * prenda['brecha_oit']
-    return round(c_social)
-```
-
-### Complejidad
-
-- **Temporal:** O(1)
-- **Espacial:** O(1)
-
----
-
-## Ensamblaje: Precio Justo
-
-Una vez calculados los tres módulos, el precio justo final se obtiene con:
-
-$$P_{\text{justo}} = \alpha_e \cdot (P_{\text{comercial}} + C_{\text{ambiental}} + C_{\text{social}})$$
-
-El resultado se calcula para **todas las empresas en paralelo** (via `list comprehension` o `pandas.apply`) y se devuelve como una lista ordenada de mayor a menor `P_justo`.
+### Pipeline de ejecución
 
 ```python
-def calcular_precio_justo(empresa: dict, material: dict, prenda: dict) -> dict:
-    alpha = calcular_alpha(empresa['transparencia'])
-    vida, c_amb = calcular_c_ambiental(empresa['transparencia'], material)
-    c_soc = calcular_c_social(empresa, prenda)
-    p_justo = round(alpha * (prenda['precio_base'] + c_amb + c_soc))
-
-    return {
-        "empresa": empresa['nombre'],
-        "precio_etiqueta": prenda['precio_base'],
-        "alpha_e": round(alpha, 2),
-        "c_ambiental": c_amb,
-        "c_social": c_soc,
-        "p_justo": p_justo,
-        "vida_util_meses": vida,
-        "transparencia_pct": round(empresa['transparencia'] * 100),
-        "nivel": badge(empresa['transparencia'])
-    }
-
-def run_all(material_key: str, prenda_key: str) -> list[dict]:
+def run_all(material_key, prenda_key, margen, markup_retail, mercado_destino):
     mat = MATERIALES[material_key]
     pre = PRENDAS[prenda_key]
-    results = [calcular_precio_justo(e, mat, pre) for e in EMPRESAS]
-    return sorted(results, key=lambda x: x['p_justo'], reverse=True)
+    resultados = [
+        calcular_precio_justo(e, mat, pre, prenda_key, mercado_destino, margen, markup_retail)
+        for e in EMPRESAS
+    ]
+    return sorted(resultados, key=lambda x: x["brecha_mxn"])
+```
+
+**Complejidad total:** O(E log E) donde E = 8 empresas. El ordenamiento final domina.
+
+---
+
+## 10. Módulo 5 — Simulación Monte Carlo: sensibilidad al precio de carbono
+
+### Problema y diagnóstico de la versión anterior
+
+La implementación inicial calculaba el "umbral de quiebre CO2" como el percentil 90 de los precios de CO2 del vector de simulación ordenado por P_justo. Esto equivale algebraicamente al percentil 90 de Uniform(3.5, 25) ≈ 22.85 MXN/kg, una constante de distribución independiente de la empresa. El resultado era idéntico para todas las marcas porque el método no medía una propiedad de la empresa, sino una propiedad de la distribución de entrada.
+
+### Rediseño
+
+El módulo v2 reformula la pregunta: dado que el costo de remediación CO2 por prenda es lineal en el precio del bono, la sensibilidad real de cada empresa es:
+
+$$\text{sensibilidad}_e = \frac{\partial c_{\text{CO}_2,e}}{\partial p_{\text{CO}_2}} = \frac{c_{\text{CO}_2,e}^{\text{base}}}{p_{\text{CO}_2}^{\text{base}}}$$
+
+Esta sensibilidad **sí varía por empresa** porque $c_{\text{CO}_2}$ depende de $f_{\text{repos}}$, que a su vez depende de la vida útil esperada calculada por Markov, que depende de la transparencia de la empresa.
+
+### Variables estocásticas
+
+| Variable | Distribución | Rango | Justificación |
+|---|---|---|---|
+| Precio CO2 | Uniform(3.5, 200) MXN/kg | 3.5 = mercado voluntario México; 200 = límite IPCC AR6 escenario 1.5°C | Cubre todo el espectro de política climática conocido |
+| Precio agua | Normal(0.25, σ=0.075) MXN/L | clip [0.05, 1.20] | Incertidumbre metodológica en valoración de agua |
+
+### Métricas diferenciadas por empresa
+
+**Sensibilidad analítica:** MXN adicionales en el costo ambiental por cada MXN/kg de aumento en el precio del bono de carbono.
+
+**Precio de breakeven:**
+
+$$p_{\text{CO}_2}^{\text{breakeven}} = \frac{\theta \cdot P_{\text{etiqueta}}}{\text{sensibilidad}_e}$$
+
+donde $\theta$ es el umbral de materialidad (10%, 25% o 50% del precio de etiqueta). Este precio sí es específico de cada empresa.
+
+**Ejemplo (algodón convencional, playera):**
+- Shein: sensibilidad = 12.53 MXN/prenda por MXN/kg·CO2; breakeven 25% etiqueta = $2.97 MXN/kg
+- Patagonia: sensibilidad = 8.68 MXN/prenda por MXN/kg·CO2; breakeven 25% etiqueta = $37.43 MXN/kg
+
+La diferencia se explica porque Shein (transparencia = 5%) produce prendas con vida útil de ~1.5 meses → factor de reposición ≈ 16×, que amplifica el costo ambiental por unidad de tiempo de uso.
+
+---
+
+## 11. Módulo 6 — Simulación Monte Carlo: agotamiento hídrico acumulado
+
+### Pregunta central
+
+Si un grupo de N personas compra X prendas de un material determinado por año, ¿en cuántos años el agua embebida en su producción equivale a referencias hídricas concretas y localmente reconocibles?
+
+### Variables estocásticas
+
+| Variable | Distribución | Parámetros | Justificación |
+|---|---|---|---|
+| Huella hídrica por kg fibra | Normal(μ, σ=0.30μ) | μ = base de db.py | Variabilidad metodológica LCA y variaciones de cultivo interanual |
+| Prendas por persona por año | Normal(μ, σ=0.25μ) | μ = input del usuario | Heterogeneidad de comportamiento de consumo dentro del grupo |
+
+### Modelo
+
+Para cada simulación $s$ y año $t$:
+
+$$L_{s,t} = N \times \tilde{X}_{s,t} \times w_{\text{prenda}} \times \tilde{h}_{s,t}$$
+
+donde $\tilde{X}_{s,t} \sim \mathcal{N}(\mu_X, 0.25\mu_X)$ son las prendas por persona y $\tilde{h}_{s,t} \sim \mathcal{N}(\mu_h, 0.30\mu_h)$ es la huella hídrica en L/kg.
+
+El consumo acumulado es $A_{s,T} = \sum_{t=1}^{T} L_{s,t}$.
+
+El sistema genera 2,000 trayectorias y calcula percentiles P10, P25, P50, P75, P90 y P99 para cada año del horizonte.
+
+### Referencias adaptativas
+
+El problema central de las implementaciones de este tipo es seleccionar referencias de comparación que sean a la vez informativas y alcanzables. Si la referencia está 700,000 veces por encima del fenómeno que se modela, la gráfica pierde todo valor comunicacional.
+
+El módulo selecciona referencias adaptativamente según el material:
+
+```python
+def _seleccionar_referencias(litros_por_ano_mediana, anos):
+    litros_total = litros_por_ano_mediana * anos
+    dentro = {k: v for k, v in REFERENCIAS.items() if v["litros"] <= litros_total}
+    fuera  = {k: v for k, v in REFERENCIAS.items() if litros_total < v["litros"] <= litros_total * 10}
+    # Tomar las 3 más grandes dentro del horizonte + 1 aspiracional fuera
+```
+
+Catálogo de referencias (de menor a mayor):
+
+| Referencia | Volumen | Fuente |
+|---|---|---|
+| Persona/año (2 L/día) | 730 L | OMS |
+| Piscina privada residencial | 30,000 L | NOM-127 |
+| Alberca olímpica FINA | 2,500,000 L | FINA Technical Regulations 2022 |
+| Lago de Chapultepec | 1,700,000 L | SEDEMA CDMX |
+| Presa Cutzamala (cap. útil) | 960,000,000 L | CONAGUA 2023 |
+| CDMX anual | 1,100,000,000,000 L | SACMEX / CONAGUA 2023 |
+
+Para poliéster (62 L/kg), la referencia alcanzable en un horizonte de 15 años con configuración estándar es la piscina privada. Para algodón convencional (10,000 L/kg), el sistema selecciona alberca olímpica, Lago de Chapultepec y piscina privada.
+
+---
+
+## 12. Módulo 7 — Simulación Monte Carlo: reloj de deuda social
+
+### Pregunta central
+
+Si un grupo de N personas consume X prendas de una marca determinada por año, ¿en cuántos años la deuda salarial acumulada (brecha entre salario mínimo pagado y salario digno) equivale al salario anual completo de un trabajador textil?
+
+### Variables estocásticas
+
+| Variable | Distribución | σ relativo | Justificación |
+|---|---|---|---|
+| Tipo de cambio USD → MXN | Normal(TC_MXN, σ=8%) | 8% | Volatilidad histórica anualizada del peso mexicano |
+| Brecha salarial (salario digno - mínimo) | Normal(μ, σ=20%) | 20% | Variación inter-fábrica y temporal en datos WageIndicator |
+| Factor de riesgo laboral | Normal(μ, σ=15%) | 15% | Incertidumbre en indicadores del Banco Mundial |
+| Prendas por persona/año | Normal(μ, σ=20%) | 20% | Heterogeneidad de consumo |
+
+### Modelo
+
+La brecha salarial por prenda para una simulación $s$ se calcula ponderando por la distribución de manufactura:
+
+$$B_{s,e} = \sum_{i} \left[ \frac{\tilde{\delta}_{i,s}}{h_{\text{mes},i}} \times h_{\text{prenda}} \times \tilde{f}_{i,s} \times w_{i,e} \right]$$
+
+donde $\tilde{\delta}_{i,s}$ es la brecha salarial estocástica en el país $i$, $h_{\text{prenda}}$ son las horas de manufactura de la prenda, $\tilde{f}_{i,s}$ es el factor de riesgo estocástico y $w_{i,e}$ es la fracción de producción de la empresa $e$ en el país $i$.
+
+El tipo de cambio estocástico $\tilde{TC}_s$ convierte el total acumulado en MXN.
+
+La deuda acumulada en MXN al año $T$ para la simulación $s$:
+
+$$D_{s,T}^{\text{MXN}} = \tilde{TC}_s \times \sum_{t=1}^{T} \left( N \times \tilde{X}_{s,t} \times B_{s,e} \right)$$
+
+### Umbrales de referencia
+
+La deuda acumulada se compara contra el salario anual total de un trabajador textil en distintos contextos:
+
+| Referencia | Umbral (USD/año) |
+|---|---|
+| Salario mínimo Bangladesh | $1,356 |
+| Salario mínimo Vietnam | $3,000 |
+| Salario mínimo México | $3,120 |
+| Salario digno Bangladesh (metodología Anker) | $5,880 |
+
+La gráfica muestra las 500 trayectorias del haz, las bandas de incertidumbre P25–P75 y las líneas horizontales de umbral para cada referencia salarial.
+
+---
+
+## 13. Módulo LLM — Narrativa interpretativa
+
+El frontend invoca opcionalmente la API de Anthropic Claude (`claude-sonnet-4-20250514`) para generar un párrafo de narrativa interpretativa a partir del JSON de resultados del ensamblaje. El prompt incluye el veredicto, la brecha entre precio etiqueta y P_justo, el porcentaje ambiental y social, y la empresa con mayor opacidad del conjunto.
+
+El módulo es completamente opcional y no afecta los cálculos cuantitativos. Su función es pedagógica: traducir los resultados numéricos a lenguaje accesible para audiencias no especializadas.
+
+```python
+def generar_narrativa(resultados: list[dict]) -> str:
+    client = anthropic.Anthropic()
+    mensaje = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=1000,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return mensaje.content[0].text
 ```
 
 ---
 
-## Bases de datos y fuentes
+## 14. Complejidad algorítmica
 
-El sistema utiliza una base de datos estática en Python (diccionario hardcodeado) para la versión inicial, con los siguientes datos reales preprocesados:
-
-### Empresas (8 empresas hardcodeadas)
-
-| Empresa | Índice FTI (%) | País mfg. | Factor riesgo CSI |
+| Módulo | Complejidad temporal | Complejidad espacial | Nota |
 |---|---|---|---|
-| Shein | 5 | China | 1.8 |
-| H&M | 62 | Bangladesh | 1.2 |
-| Zara (Inditex) | 55 | Portugal | 1.1 |
-| Nike | 68 | Vietnam | 1.0 |
-| Patagonia | 92 | USA | 0.3 |
-| Levi's | 70 | México | 0.8 |
-| Primark | 22 | India | 1.5 |
-| Adidas | 74 | Indonesia | 1.0 |
+| Costo de producción (FOB + Landed) | O(P) — P países por empresa | O(P) | P ≤ 8 en la DB actual |
+| KL Divergence (opacidad) | O(1) | O(1) | Fórmula escalar cerrada |
+| Markov (inversión matricial) | O(n³), n=2 | O(n²) | Constante en la práctica |
+| Costo social (brecha salarial) | O(P) | O(P) | Ponderación por país |
+| API Banco Mundial | O(P) red | O(P) | Con caché LRU en memoria |
+| Ensamblaje P_justo (una empresa) | O(P) | O(P) | P países de manufactura |
+| Pipeline completo (E empresas) | O(E × P) | O(E) | E=8, P≤8 → O(1) práctica |
+| Ordenamiento output | O(E log E) | O(E) | Dominante del pipeline |
+| Monte Carlo CO2 (2000 sim.) | O(N) | O(N × E) | N sim., E empresas |
+| Monte Carlo hídrico (2000 sim.) | O(N × T) | O(N × T) | T = años del horizonte |
+| Monte Carlo deuda social (2000 sim.) | O(N × T × P) | O(N × T) | P países por empresa |
 
-### Materiales (5 materiales)
-
-| Material | Vida base (meses) | Costo remediación (MXN) |
-|---|---|---|
-| Poliéster | 6 | 280 |
-| Algodón convencional | 14 | 180 |
-| Algodón orgánico | 20 | 120 |
-| Lana | 30 | 100 |
-| Viscosa | 8 | 220 |
-
-### Fuentes de referencia
-
-| Fuente | Uso | URL |
-|---|---|---|
-| Fashion Transparency Index | Índice de transparencia por empresa | fashionrevolution.org/fti |
-| CSI Global Rights Index | Factor de riesgo laboral por país | globalrightsindex.org |
-| OIT — Salario mínimo vital | Brecha salarial por país de manufactura | ilo.org/travail |
-| Ellen MacArthur Foundation | Tasas de transición Markov (vida útil de prendas) | ellenmacarthurfoundation.org |
+El sistema completo (sin Monte Carlo) tiene complejidad O(E log E) ≈ O(1) para el tamaño actual de datos. La latencia dominante en producción es la llamada a la API del Banco Mundial (~300–600 ms por país, con caché LRU que elimina llamadas repetidas en la misma sesión) y la API de Claude (~1–3 s por narrativa).
 
 ---
 
-## Stack tecnológico
+## 15. Stack tecnológico
 
-| Capa | Tecnología | Justificación |
-|---|---|---|
-| Backend | Python 3.11 | Ecosistema científico, numpy para álgebra lineal |
-| Álgebra lineal | NumPy | Inversión de matriz F=(I-Q)⁻¹ |
-| Frontend | Streamlit | Despliegue rápido de dashboards de datos |
-| Visualización | Plotly Express | Gráficas de barras apiladas interactivas |
-| Contenedorización | Docker | Reproducibilidad del entorno |
-| LLM (opcional) | Anthropic Claude API | Narrativa explicativa de resultados |
-| Datos | Diccionario Python (JSON estático) | Simplicidad para prototipo académico |
-
-### APIs externas
-
-| API | Uso | Autenticación |
-|---|---|---|
-| Anthropic Claude API (`claude-sonnet-4-20250514`) | Generación de narrativa explicativa opcional | API Key en `.env` |
-
-El resto del sistema **no requiere llamadas a APIs externas** en tiempo de ejecución. Todos los índices (FTI, CSI, OIT) están preprocesados y almacenados en el diccionario de datos.
-
----
-
-## Complejidad algorítmica
-
-| Módulo | Complejidad temporal | Complejidad espacial | Cuello de botella |
+| Capa | Tecnología | Versión | Justificación |
 |---|---|---|---|
-| Módulo 1 — KL divergence | O(&#124;X&#124;) ≈ O(1) | O(1) | Ninguno |
-| Módulo 2 — Markov (inversión) | O(n³), n=2 → O(1) | O(n²) → O(1) | Ninguno |
-| Módulo 3 — Nash payoff | O(1) | O(1) | Ninguno |
-| Ensamblaje P_justo | O(1) por empresa | O(1) | Ninguno |
-| Pipeline completo (E empresas) | O(E) | O(E) | Lineal en # empresas |
-| Ordenamiento del output | O(E log E) | O(E) | Dominante total |
-
-**Complejidad total del sistema:** O(E log E) donde E = número de empresas (actualmente 8).
-
-El sistema es computacionalmente trivial. El verdadero cuello de botella es la latencia de red si se activa el módulo LLM opcional (~1–3s por llamada a la API de Claude).
+| Backend | Python | 3.11 | Ecosistema científico maduro |
+| Álgebra lineal | NumPy | 1.26.4 | Inversión matricial Markov, operaciones vectorizadas MC |
+| Frontend / Dashboard | Streamlit | 1.35.0 | Despliegue rápido de dashboards interactivos |
+| Visualización | Plotly | 5.22.0 | Gráficas interactivas: barras apiladas, haz de líneas, histogramas |
+| DataFrames | Pandas | 2.2 | Tablas de resultados y exportación |
+| LLM | Anthropic Claude API | `claude-sonnet-4-20250514` | Narrativa interpretativa opcional |
+| API externa | World Bank Open Data API v2 | — | Indicadores laborales en tiempo real |
+| HTTP | `requests` | 2.31 | Llamadas a World Bank API con timeout y fallback |
+| Contenedorización | Docker + Docker Compose | — | Reproducibilidad del entorno |
+| Variables de entorno | python-dotenv | 1.0.1 | Gestión de API keys |
 
 ---
 
-## Estructura del proyecto
+## 16. Estructura del proyecto
 
 ```
 ecojusto-ai/
@@ -418,68 +677,97 @@ ecojusto-ai/
 ├── requirements.txt
 ├── .env.example
 │
-├── data/
-│   └── db.py                  # Diccionario de empresas, materiales y prendas
-│
-├── algoritmo/
-│   ├── __init__.py
-│   ├── opacidad.py            # Módulo 1: D_KL → alpha_e
-│   ├── markov.py              # Módulo 2: Cadena absorbente → C_ambiental
-│   ├── social.py              # Módulo 3: Nash payoff → C_social
-│   └── ensamblaje.py          # P_justo = alpha * (P + C_amb + C_soc)
-│
-├── llm/
-│   └── narrativa.py           # Prompt a Claude API (opcional)
+├── src/
+│   ├── data/
+│   │   ├── db.py                        # EMPRESAS, MATERIALES, PRENDAS, SALARIOS_PAIS, constantes
+│   │   └── world_bank.py                # API Banco Mundial: get_factor_riesgo_pais(), get_datos_pais()
+│   │
+│   └── algoritmo/
+│       ├── __init__.py
+│       ├── opacidad.py                  # calcular_alpha(transparencia) → alpha_e
+│       ├── markov.py                    # calcular_c_ambiental() → (vida_util, c_ambiental, c_agua, c_co2)
+│       ├── social.py                    # calcular_c_social() → (c_social, c_real, c_digno, factor_prom, desglose)
+│       ├── costo_produccion.py          # calcular_fob(), calcular_landed_cost()
+│       ├── ensamblaje.py                # calcular_precio_justo(), run_all()
+│       ├── monte_carlo.py               # simular_sensibilidad_co2(), comparar_sensibilidad_todas()
+│       ├── monte_carlo_hidrico.py       # simular_huella_hidrica()
+│       └── monte_carlo_deuda_social.py  # simular_deuda_social(), comparar_empresas_deuda()
 │
 └── frontend/
-    └── app.py                 # Streamlit: inputs + Plotly dashboard
+    └── app.py                           # Streamlit: sidebar, gráficas, 3 tabs Monte Carlo, LLM
 ```
 
 ---
 
-## Instrucciones de instalación
+## 17. Instrucciones de instalación
 
 ```bash
 # Clonar el repositorio
 git clone https://github.com/tu-usuario/ecojusto-ai.git
 cd ecojusto-ai
 
-# Opción A: Docker (recomendado)
+# Opción A: Docker (recomendado para reproducibilidad)
 docker-compose up --build
+# La aplicación estará disponible en http://localhost:8501
 
-# Opción B: Local
+# Opción B: entorno local
 python -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
+source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env           # Agregar API key de Anthropic si se usa el módulo LLM
+cp .env.example .env            # Agregar ANTHROPIC_API_KEY si se usa el módulo LLM
 streamlit run frontend/app.py
 ```
 
 **requirements.txt:**
+
 ```
 streamlit==1.35.0
 numpy==1.26.4
 plotly==5.22.0
+pandas==2.2.2
 anthropic==0.28.0
+requests==2.31.0
 python-dotenv==1.0.1
 ```
 
----
+**Variables de entorno (.env):**
 
-## Supuestos y limitaciones
+```
+ANTHROPIC_API_KEY=sk-ant-...    # Requerida solo para el módulo LLM
+```
 
-1. **Datos estáticos:** los índices FTI, CSI y OIT están fijados a la edición 2023–2024. El sistema no hace scraping en tiempo real.
-
-2. **Granularidad empresa:** el índice FTI cubre ~250 marcas. Empresas no cubiertas recibirán un valor de transparencia por defecto (20%).
-
-3. **Matriz de Markov calibrada manualmente:** las probabilidades de transición entre estados (Activo → Segunda Mano → Basurero) se estimaron con base en literatura de la Ellen MacArthur Foundation. No son resultado de un modelo estadístico entrenado.
-
-4. **C_social usa precio base fijo:** se utiliza el precio base de la prenda (no el precio de etiqueta) para evitar circularidad — una empresa que vende más barato no debería tener menor costo social.
-
-5. **γ = 0.3 es un hiperparámetro:** el parámetro de escala de la penalización KL no ha sido optimizado empíricamente. Es un valor de diseño justificable pero arbitrario.
-
-6. **Alcance académico:** este sistema es un prototipo demostrativo para un proyecto de clase de Inteligencia Artificial. No debe usarse como fuente de verdad para decisiones de consumo reales sin validación adicional de los datos subyacentes.
+La API del Banco Mundial no requiere autenticación. El resto del sistema funciona sin conexión a internet, utilizando los datos preprocesados en `db.py` y el diccionario de fallback en `world_bank.py`.
 
 ---
 
-*EcoJusto AI — Proyecto académico de IA, 2025.*
+## 18. Supuestos, limitaciones y trabajo futuro
+
+### Supuestos del modelo
+
+**Datos estáticos en `db.py`:** Los índices FTI, salarios mínimos y huellas hídricas están fijados a las ediciones 2023–2024 de cada fuente. El sistema no actualiza estos valores automáticamente.
+
+**Distribución de manufactura hardcodeada:** Las fracciones de producción por país se estimaron con base en informes públicos disponibles y pueden diferir de la distribución real interna de cada empresa.
+
+**Markup retail constante:** El multiplicador 2.8× sobre el landed cost es un promedio de la industria. Empresas con modelos de negocio muy distintos (venta directa al consumidor vs. distribución por terceros) tendrían multiplicadores diferentes.
+
+**Vida útil como proxy de calidad:** Se asume que la transparencia del índice FTI correlaciona con la calidad de manufactura y, por extensión, con la vida útil de las prendas. Esta correlación es plausible pero no está empíricamente validada en la literatura.
+
+**Factor de reposición lineal:** El modelo asume que una prenda con vida útil de 12 meses (en lugar de 24) generará el doble de impacto ambiental a lo largo del tiempo. Esto es correcto bajo el supuesto de que el consumidor efectivamente repone la prenda, lo cual depende de factores de demanda fuera del modelo.
+
+**Parámetro γ = 0.3:** El parámetro de escala de la penalización KL no fue optimizado con datos empíricos. Es un valor de diseño que produce penalizaciones en el rango [1.0, 1.9] para el rango observado de transparencias FTI.
+
+### Limitaciones
+
+Los precios calculados por el sistema son órdenes de magnitud superiores a los precios de etiqueta para todas las empresas en el dataset actual. Esto es un resultado del modelo, no un error: refleja que el costo de internalizar completamente las externalidades ambientales y sociales supera con creces el precio de mercado. Sin embargo, la magnitud exacta depende críticamente de los valores del markup retail, el factor de reposición y los precios de remediación ambiental, todos los cuales tienen incertidumbre significativa. Los módulos Monte Carlo cuantifican parte de esa incertidumbre.
+
+### Trabajo futuro
+
+- Integración con la base de datos USITC de importaciones para actualización automática de distribuciones de manufactura
+- Calibración empírica del parámetro γ usando datos de litigios ambientales y sociales como variable de resultado
+- Extensión del espacio de estados Markov para incluir estados de reciclaje y compostaje
+- Modelo de demanda para estimar el efecto de la internalización de costos sobre el volumen de consumo
+- API REST desacoplada del frontend para permitir integración con otros sistemas
+
+---
+
+*EcoJusto AI — Proyecto académico de Inteligencia Artificial, 2025.*
