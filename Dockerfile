@@ -21,6 +21,6 @@ EXPOSE 8501
 # Variables de entorno opcionales
 ENV PYTHONPATH=/app
 
-CMD ["streamlit", "run", "frontend/app.py", \
+CMD ["python3", "-m", "streamlit", "run", "src/frontend/app.py", \
      "--server.port=8501", \
      "--server.address=0.0.0.0"]
