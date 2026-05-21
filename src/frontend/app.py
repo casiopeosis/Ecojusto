@@ -412,82 +412,184 @@ tab_co2, tab_hidrico, tab_deuda = st.tabs(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — Monte Carlo: Bono de Carbono (módulo original)
+# TAB 1 — Monte Carlo: Sensibilidad al Precio del Bono de Carbono (v2)
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_co2:
-    st.subheader("🎲 Análisis de Estrés Industrial vía Monte Carlo")
+    from src.algoritmo.monte_carlo import simular_sensibilidad_co2, comparar_sensibilidad_todas
+
+    st.subheader("🎲 Sensibilidad al Precio del Bono de Carbono")
     st.caption(
-        "Simula 2,000 escenarios estocásticos variando los precios internacionales de CO₂ y "
-        "remediación de agua para proyectar el punto de quiebre financiero del Fast Fashion."
+        "Simula 2,000 escenarios de precios de CO₂ (rango 3.5–200 MXN/kg, cubriendo desde el "
+        "mercado voluntario actual hasta escenarios IPCC 2°C). "
+        "**KPI central:** ¿A qué precio de carbono el costo de remediación CO₂ se vuelve "
+        "materialmente significativo para cada marca? Esto **sí varía por empresa** porque "
+        "depende de la vida útil de las prendas (transparencia → factor de reposición)."
     )
 
     col_mc1, col_mc2 = st.columns([1, 3])
-
     with col_mc1:
         empresa_mc = st.selectbox(
-            "Selecciona Marca a Auditar", [e["nombre"] for e in EMPRESAS],
-            key="empresa_co2",
+            "Marca a auditar", [e["nombre"] for e in EMPRESAS], key="empresa_co2"
         )
-        st.info(
-            "Pregunta clave: ¿Cuánto tendría que subir el bono de carbono para que esta "
-            "empresa no pueda seguir rentabilizando sus externalidades?"
-        )
+        st.markdown("**Escenarios de referencia (MXN/kg CO₂):**")
+        st.markdown("- Actual México: **$3.50**")
+        st.markdown("- Objetivo París 2030: **$35**")
+        st.markdown("- IPCC 1.5°C (2050): **$100–200**")
 
-    res_mc = simular_umbrales_co2(empresa_mc, material_key, prenda_key)
+    with st.spinner("Calculando sensibilidad CO₂..."):
+        res_co2 = simular_sensibilidad_co2(empresa_mc, material_key, prenda_key, n_simulaciones=2000)
 
     with col_mc2:
-        st.metric(
-            f"Punto de Quiebre CO₂ (P90) — {empresa_mc}",
-            f"${res_mc['umbral_co2_percentil_90']} MXN/kg",
-            f"Inviable en el {res_mc['pct_escenarios_insostenible']}% de los escenarios futuros",
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric(
+            "Sensibilidad CO₂",
+            f"${res_co2['sensibilidad_co2_mxn_por_mxn_kg']:.2f} MXN/prenda",
+            f"por cada MXN/kg de bono de carbono",
         )
-        fig_hist = px.histogram(
-            x=res_mc["historico_precios_justos"],
-            nbins=40,
-            labels={"x": "Precio Justo Simulado (MXN)", "y": "Frecuencia de Escenarios"},
-            title=f"Distribución del Precio Justo bajo Estrés Climático — {prenda_label} de {mat_label}",
-            color_discrete_sequence=["#8E44AD"],
+        mc2.metric(
+            "Breakeven 25% etiqueta",
+            f"${res_co2['co2_breakeven_25pct_etiqueta']:.1f} MXN/kg",
+            f"Vida útil: {res_co2['vida_util_meses']} meses",
         )
-        fig_hist.add_vline(
-            x=res_mc["precio_etiqueta"],
-            line_dash="dash",
-            line_color="red",
-            annotation_text=f"Precio Etiqueta (${res_mc['precio_etiqueta']} MXN)",
+        mc3.metric(
+            "Escenarios c_ambiental > etiqueta",
+            f"{res_co2['pct_c_ambiental_supera_etiqueta']:.0f}%",
+            "de 2,000 simulaciones",
+            delta_color="inverse",
         )
-        fig_hist.update_layout(plot_bgcolor="rgba(0,0,0,0)")
-        st.plotly_chart(fig_hist, use_container_width=True)
+
+    # ── Gráfica 1: Curva de sensibilidad — c_co2(precio) por empresa ─────────
+    with st.spinner("Comparando todas las marcas..."):
+        todas_co2 = comparar_sensibilidad_todas(material_key, prenda_key, n_simulaciones=500)
+
+    fig_curva = go.Figure()
+    colores_curva = ["#e63946","#f4a261","#e9c46a","#2a9d8f","#264653","#a8dadc","#457b9d","#1d3557"]
+    for i, r in enumerate(todas_co2):
+        es_seleccionada = r["empresa"] == empresa_mc
+        fig_curva.add_trace(go.Scatter(
+            x=r["precios_curva"],
+            y=r["c_co2_curva"],
+            mode="lines",
+            name=r["empresa"],
+            line=dict(
+                color=colores_curva[i % len(colores_curva)],
+                width=3 if es_seleccionada else 1.5,
+                dash="solid" if es_seleccionada else "dot",
+            ),
+        ))
+
+    # Líneas verticales de escenarios de política
+    for precio_ref, etiqueta_ref, color_ref in [
+        (3.5,  "Actual MX",     "rgba(200,200,200,0.5)"),
+        (35.0, "Objetivo París","rgba(100,200,150,0.7)"),
+        (100.0,"IPCC 1.5°C",   "rgba(255,150,50,0.7)"),
+    ]:
+        fig_curva.add_vline(
+            x=precio_ref, line_dash="dash", line_color=color_ref,
+            annotation_text=etiqueta_ref, annotation_font_size=10,
+        )
+
+    # Línea horizontal: precio de etiqueta de la empresa seleccionada
+    fig_curva.add_hline(
+        y=res_co2["precio_etiqueta"],
+        line_dash="longdash", line_color="red",
+        annotation_text=f"Etiqueta {empresa_mc} (${res_co2['precio_etiqueta']} MXN)",
+        annotation_font_size=10,
+    )
+
+    fig_curva.update_layout(
+        height=420,
+        title=f"Curva de Sensibilidad: Costo CO₂ por prenda vs Precio del Bono — {mat_label}",
+        xaxis=dict(title="Precio del bono de carbono (MXN/kg CO₂)", gridcolor="rgba(200,200,200,0.15)"),
+        yaxis=dict(title="Costo remediación CO₂ por prenda (MXN)", gridcolor="rgba(200,200,200,0.15)"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, font=dict(size=10)),
+    )
+    st.plotly_chart(fig_curva, use_container_width=True)
+
+    # ── Gráfica 2: Histograma del costo ambiental bajo incertidumbre ─────────
+    fig_hist_co2 = px.histogram(
+        x=res_co2["sim_c_ambiental"],
+        nbins=50,
+        labels={"x": "Costo ambiental total simulado (MXN/prenda)", "y": "Escenarios"},
+        title=f"Distribución del Costo Ambiental bajo 2,000 escenarios de precio CO₂ — {empresa_mc}",
+        color_discrete_sequence=["#8E44AD"],
+    )
+    fig_hist_co2.add_vline(
+        x=res_co2["c_ambiental_base"], line_dash="dash", line_color="cyan",
+        annotation_text=f"Base actual (${res_co2['c_ambiental_base']:,.0f} MXN)",
+        annotation_font_size=10,
+    )
+    fig_hist_co2.add_vline(
+        x=res_co2["precio_etiqueta"], line_dash="dash", line_color="red",
+        annotation_text=f"Etiqueta (${res_co2['precio_etiqueta']} MXN)",
+        annotation_font_size=10,
+    )
+    fig_hist_co2.update_layout(plot_bgcolor="rgba(0,0,0,0)", height=350)
+    st.plotly_chart(fig_hist_co2, use_container_width=True)
+
+    # ── Tabla comparativa de sensibilidad por empresa ─────────────────────────
+    st.subheader("📊 Comparativa de sensibilidad por empresa")
+    st.caption(
+        "Empresas con vida útil baja (baja transparencia → alta frecuencia de reposición) "
+        "tienen mayor sensibilidad al precio del carbono. "
+        "El breakeven es el precio de bono donde el costo de remediación CO₂ supera el 25% del precio de etiqueta."
+    )
+    df_sens = pd.DataFrame([
+        {
+            "Empresa": r["empresa"],
+            "Transparencia": f"{r['transparencia_pct']}%",
+            "Vida útil (meses)": r["vida_util_meses"],
+            "Sensibilidad (MXN/prenda\npor MXN/kg CO₂)": r["sensibilidad_co2_mxn_por_mxn_kg"],
+            "Breakeven 25% etiqueta\n(MXN/kg CO₂)": r["co2_breakeven_25pct_etiqueta"],
+            "c_ambiental base (MXN)": f"${r['c_ambiental_base']:,.0f}",
+            "% c_amb vs etiqueta": f"{r['pct_ambiental_vs_etiqueta']:.0f}%",
+        }
+        for r in todas_co2
+    ])
+    st.dataframe(df_sens, use_container_width=True, hide_index=True)
+
+    st.info(
+        f"📌 **Interpretación:** Con el precio actual del bono de carbono ($3.50 MXN/kg), "
+        f"**{empresa_mc}** genera un costo de remediación CO₂ de **${res_co2['c_co2_base']:.2f} MXN** "
+        f"por prenda de {mat_label}. Si el precio subiera al nivel del Acuerdo de París ($35 MXN/kg), "
+        f"ese costo subiría a **${res_co2['sensibilidad_co2_mxn_por_mxn_kg']*35:.2f} MXN** por prenda. "
+        f"La empresa con mayor sensibilidad es **{todas_co2[0]['empresa']}** "
+        f"({todas_co2[0]['sensibilidad_co2_mxn_por_mxn_kg']:.2f} MXN/prenda por MXN/kg CO₂) "
+        f"porque sus prendas duran solo {todas_co2[0]['vida_util_meses']} meses en promedio, "
+        f"amplificando el impacto de cada producción."
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — Monte Carlo: Agotamiento Hídrico Acumulado
+# TAB 2 — Monte Carlo: Agotamiento Hídrico Acumulado (v3 — referencias adaptativas)
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_hidrico:
     st.subheader("💧 Simulación de Agotamiento Hídrico Acumulado")
     st.caption(
-        "¿Si el salón compra X prendas al año, cuántos años tarda en equivaler al "
-        "consumo anual de agua potable de la CDMX? "
-        "Variables estocásticas: huella hídrica (±30%) y prendas consumidas (±25%)."
+        "¿Cuántos años tarda el consumo del salón en equivaler a una alberca olímpica, "
+        "al Lago de Chapultepec o a la Presa Cutzamala? "
+        "Las referencias son **adaptativas al material**: siempre hay al menos un cruce "
+        "visible en el horizonte. Poliéster (62 L/kg) y algodón (10,000 L/kg) "
+        "tienen escalas muy distintas — la gráfica lo refleja correctamente."
     )
 
-    # ── Controles ─────────────────────────────────────────────────────────────
     col_h1, col_h2, col_h3, col_h4 = st.columns(4)
     with col_h1:
-        n_personas_h = st.slider(
-            "Personas en el salón", 10, 80, 30, 5, key="h_personas"
-        )
+        n_personas_h = st.slider("Personas en el salón", 10, 80, 30, 5, key="h_personas")
     with col_h2:
         prendas_h = st.slider(
             "Prendas / persona / año", 5, 100, 25, 5, key="h_prendas",
-            help="Promedio global de consumo fast fashion: ~60 prendas/año.",
+            help="Promedio mundial fast fashion: ~60 prendas/año (McKinsey 2023).",
         )
     with col_h3:
         anos_h = st.slider("Horizonte (años)", 5, 30, 15, 1, key="h_anos")
     with col_h4:
         st.markdown("**Material seleccionado:**")
         st.markdown(f"**{mat_label}**")
-        st.caption(f"{MATERIALES[material_key]['huella_hidrica_litros_kg']:,} L/kg fibra")
+        litros_kg = MATERIALES[material_key]['huella_hidrica_litros_kg']
+        st.caption(f"{litros_kg:,} L/kg fibra")
 
-    # ── Simulación ────────────────────────────────────────────────────────────
     with st.spinner("🌊 Simulando 2,000 trayectorias hídricas..."):
         res_h = simular_huella_hidrica(
             material_key=material_key,
@@ -498,104 +600,96 @@ with tab_hidrico:
             n_sim=2000,
         )
 
-    # ── Métricas resumen ──────────────────────────────────────────────────────
     def fmt_litros(n):
-        if n >= 1e12:
-            return f"{n/1e12:.2f} billones L"
-        if n >= 1e9:
-            return f"{n/1e9:.1f} mil mill. L"
-        if n >= 1e6:
-            return f"{n/1e6:.1f} millones L"
+        if n >= 1e12: return f"{n/1e12:.2f} billones L"
+        if n >= 1e9:  return f"{n/1e9:.1f} mil mill. L"
+        if n >= 1e6:  return f"{n/1e6:.1f} M L"
+        if n >= 1e3:  return f"{n/1e3:.1f} mil L"
         return f"{n:,.0f} L"
 
-    eq_cdmx = res_h["equivalencias"]["CDMX"]
-    eq_gdl  = res_h["equivalencias"]["Guadalajara"]
-
+    # ── Métricas resumen ──────────────────────────────────────────────────────
     mh1, mh2, mh3, mh4 = st.columns(4)
     mh1.metric(
         f"Consumo P50 (año {anos_h})",
         fmt_litros(res_h["p50_final"]),
-        f"{res_h['p50_final'] / res_h['cdmx_litros_año'] * 100:.1f}% del agua anual CDMX",
+        f"≈ {res_h['equiv_albercas_p50']} albercas olímpicas",
     )
     mh2.metric(
         "Escenario adverso P90",
         fmt_litros(res_h["p90_final"]),
-        f"{res_h['p90_final'] / res_h['cdmx_litros_año'] * 100:.1f}% del agua anual CDMX",
-    )
-    cruce_txt = (
-        f"En {eq_cdmx['años_p50']} años (P50)"
-        if eq_cdmx["años_p50"]
-        else f"No alcanza en {anos_h} años"
-    )
-    mh3.metric("¿Cuándo iguala CDMX?", cruce_txt,
-               f"P90: {eq_cdmx['años_p90']} años" if eq_cdmx["años_p90"] else "—")
-    mh4.metric(
-        "Simul. que superan CDMX",
-        f"{res_h['pct_supera_cdmx']}%",
-        f"De {res_h['n_sim']:,} escenarios",
+        f"≈ {res_h['equiv_albercas_p90']} albercas olímpicas",
         delta_color="inverse",
     )
+    mh3.metric(
+        "Equivalente en personas",
+        f"{res_h['equiv_personas_anos_p50']:,} años-persona",
+        f"de agua potable (P50)",
+        delta_color="inverse",
+    )
+    mh4.metric(
+        "Litros por prenda",
+        fmt_litros(res_h["litros_por_prenda_base"]),
+        f"base sin incertidumbre",
+    )
 
-    # ── Gráfica: haz de trayectorias + bandas de percentiles ─────────────────
+    # ── Gráfica: haz + bandas + referencias adaptativas ──────────────────────
     anos_labels = [f"Año {i}" for i in range(anos_h + 1)]
     anos_labels[0] = "Hoy"
 
     fig_h = go.Figure()
 
-    # Haz de trayectorias (muestra)
-    muestra_haz = res_h["trayectorias_muestra"][:300]
-    for tray in muestra_haz:
+    # Haz de trayectorias (muestra, alpha muy bajo)
+    for tray in res_h["trayectorias_muestra"][:300]:
         fig_h.add_trace(go.Scatter(
-            x=anos_labels, y=tray,
-            mode="lines",
+            x=anos_labels, y=tray, mode="lines",
             line=dict(color="rgba(55,120,200,0.04)", width=1),
             showlegend=False, hoverinfo="skip",
         ))
 
-    # Banda de incertidumbre P25–P75
+    # Banda P25–P75
     fig_h.add_trace(go.Scatter(
         x=anos_labels + anos_labels[::-1],
         y=res_h["p75"] + res_h["p25"][::-1],
-        fill="toself",
-        fillcolor="rgba(55,120,200,0.12)",
+        fill="toself", fillcolor="rgba(55,120,200,0.12)",
         line=dict(color="rgba(0,0,0,0)"),
-        name="Banda P25–P75",
-        hoverinfo="skip",
+        name="Banda P25–P75", hoverinfo="skip",
     ))
 
-    # Líneas de percentiles clave
+    # Percentiles principales
     for pct_key, nombre, color, ancho in [
-        ("p50", "Mediana (P50)", "#1a5fa5", 2.5),
-        ("p90", "Escenario adverso (P90)", "#993c1d", 2),
-        ("p99", "Worst case (P99)", "#4a1b0c", 1.5),
+        ("p50", "Mediana (P50)", "#3a85d4", 2.5),
+        ("p90", "Escenario adverso (P90)", "#d4703a", 2),
+        ("p99", "Worst case (P99)", "#7a3010", 1.5),
     ]:
         fig_h.add_trace(go.Scatter(
-            x=anos_labels, y=res_h[pct_key],
-            mode="lines", name=nombre,
-            line=dict(color=color, width=ancho),
+            x=anos_labels, y=res_h[pct_key], mode="lines",
+            name=nombre, line=dict(color=color, width=ancho),
         ))
 
-    # Línea de referencia CDMX
-    fig_h.add_trace(go.Scatter(
-        x=anos_labels, y=res_h["cdmx_acumulada"],
-        mode="lines", name="Consumo acumulado CDMX (referencia)",
-        line=dict(color="#0f6e56", width=2, dash="dash"),
-    ))
-
-    # Línea de referencia Guadalajara
-    gdl_linea = [res_h["cdmx_litros_año"] * 0.345 * i for i in range(anos_h + 1)]
-    fig_h.add_trace(go.Scatter(
-        x=anos_labels, y=gdl_linea,
-        mode="lines", name="Consumo acumulado Guadalajara (ref.)",
-        line=dict(color="#1d9e75", width=1.5, dash="dot"),
-    ))
+    # Referencias adaptativas (líneas horizontales al nivel del volumen)
+    estilos_ref = ["dash", "dot", "dashdot", "longdash"]
+    for idx_r, (nombre_r, datos_r) in enumerate(res_h["equivalencias"].items()):
+        nombre_limpio = nombre_r.replace("\n", " ")
+        vol = datos_r["vol_litros"]
+        cruce = datos_r["años_p50"]
+        cruce_str = f" — cruce P50: año {cruce}" if cruce else " — fuera del horizonte"
+        fig_h.add_hline(
+            y=vol,
+            line_dash=estilos_ref[idx_r % len(estilos_ref)],
+            line_color=datos_r["color"],
+            annotation_text=f"{nombre_limpio} ({fmt_litros(vol)}){cruce_str}",
+            annotation_font_size=9,
+        )
 
     fig_h.update_layout(
-        height=480,
-        title=f"Haz Monte Carlo — Huella Hídrica Acumulada ({n_personas_h} personas × {prendas_h} prendas/año)",
+        height=500,
+        title=(
+            f"Haz Monte Carlo — Huella Hídrica Acumulada · "
+            f"{n_personas_h} personas × {prendas_h} prendas/año · {mat_label}"
+        ),
         yaxis=dict(
             title="Litros acumulados",
-            tickformat=".2s",
+            tickformat=".3s",
             gridcolor="rgba(200,200,200,0.15)",
         ),
         xaxis=dict(gridcolor="rgba(200,200,200,0.15)"),
@@ -604,33 +698,50 @@ with tab_hidrico:
     )
     st.plotly_chart(fig_h, use_container_width=True)
 
-    # ── Tabla de equivalencias urbanas ───────────────────────────────────────
-    st.subheader("🏙️ Equivalencias urbanas")
+    # ── Tabla de equivalencias ────────────────────────────────────────────────
+    st.subheader("🏊 Equivalencias de referencia")
     st.caption(
-        "Años estimados para que el consumo hídrico acumulado del salón iguale "
-        "el consumo anual completo de cada ciudad."
+        "Referencias seleccionadas adaptativamente según el material. "
+        "Cada cruce representa el año en que el consumo acumulado del salón "
+        "iguala el volumen de esa referencia."
     )
     filas_eq = []
-    for ciudad, datos in res_h["equivalencias"].items():
+    for nombre_r, datos_r in res_h["equivalencias"].items():
         filas_eq.append({
-            "Ciudad": ciudad,
-            "Consumo anual (L)": f"{datos['vol_litros_año']:,.0f}",
-            "Años hasta cruce — P50": (
-                f"{datos['años_p50']} años" if datos["años_p50"] else f">{anos_h} años"
-            ),
-            "Años hasta cruce — P90": (
-                f"{datos['años_p90']} años" if datos["años_p90"] else f">{anos_h} años"
-            ),
+            "Referencia": nombre_r.replace("\n", " "),
+            "Volumen": fmt_litros(datos_r["vol_litros"]),
+            "Cruce P50": f"Año {datos_r['años_p50']}" if datos_r["años_p50"] else f">{anos_h} años",
+            "Cruce P90": f"Año {datos_r['años_p90']}" if datos_r["años_p90"] else f">{anos_h} años",
+            "% sim. que lo superan": f"{datos_r['pct_escenarios_supera']}%",
+            "Fuente": datos_r["fuente"],
         })
     st.dataframe(pd.DataFrame(filas_eq), use_container_width=True, hide_index=True)
 
-    st.info(
-        f"📌 **Interpretación:** Con {n_personas_h} personas comprando "
-        f"{prendas_h} prendas de {mat_label} al año, en el escenario mediano "
-        f"{'el salón iguala el consumo anual de agua de la CDMX en ' + str(eq_cdmx['años_p50']) + ' años.' if eq_cdmx['años_p50'] else 'el salón no alcanza el consumo de la CDMX en el horizonte analizado.'} "
-        f"Esto considera solo el agua embebida en la producción de la fibra, "
-        f"no el agua de lavado ni uso doméstico."
+    # ── Nota interpretativa contextualizada al material actual ────────────────
+    # Encontrar la primera referencia con cruce visible
+    primera_ref = next(
+        ((n, d) for n, d in res_h["equivalencias"].items() if d["años_p50"] is not None),
+        None
     )
+    if primera_ref:
+        n_ref, d_ref = primera_ref
+        interp = (
+            f"Con {n_personas_h} personas comprando {prendas_h} prendas de "
+            f"**{mat_label}** al año, el consumo hídrico acumulado iguala "
+            f"**{n_ref.replace(chr(10), ' ')}** ({fmt_litros(d_ref['vol_litros'])}) "
+            f"en el año **{d_ref['años_p50']}** (escenario mediano). "
+            f"Esto es solo el agua embebida en la **producción de la fibra** "
+            f"— no incluye agua de lavado ni transporte."
+        )
+    else:
+        interp = (
+            f"Con {n_personas_h} personas comprando {prendas_h} prendas de "
+            f"**{mat_label}** al año, el consumo acumulado en {anos_h} años es "
+            f"**{fmt_litros(res_h['p50_final'])}** (P50). "
+            f"Prueba con un material de mayor huella hídrica (ej. Algodón Conv. o Lana) "
+            f"para ver cruces de referencia dentro del horizonte."
+        )
+    st.info(f"📌 **Interpretación:** {interp}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
