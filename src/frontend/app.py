@@ -795,7 +795,7 @@ with tab_hidrico:
         if n >= 1e3:  return f"{n/1e3:.1f} mil L"
         return f"{n:,.0f} L"
 
-    mh1, mh2, mh3, mh4 = st.columns(4)
+    mh1, mh2, mh3 = st.columns(3)
     mh1.metric(
         f"Consumo P50 (año {anos_h})",
         fmt_litros(res_h["p50_final"]),
@@ -812,11 +812,6 @@ with tab_hidrico:
         f"{res_h['equiv_personas_anos_p50']:,} años-persona",
         f"de agua potable (P50)",
         delta_color="inverse",
-    )
-    mh4.metric(
-        "Litros por prenda",
-        fmt_litros(res_h["litros_por_prenda_base"]),
-        f"base sin incertidumbre",
     )
 
     anos_labels = [f"Año {i}" for i in range(anos_h + 1)]
@@ -869,8 +864,8 @@ with tab_hidrico:
             **PLOTLY_LAYOUT,
             "height": 500,
             "title": (
-                f"Haz Monte Carlo — Huella Hídrica · "
-                f"{n_personas_h} personas × {prendas_h} prendas/año · {mat_label}"
+                f"Haz Monte Carlo — Huella Hídrica · \n"
+                f"{n_personas_h} personas × {prendas_h} prendas/año · {mat_label} \n"
             ),
             "yaxis": dict(**PLOTLY_LAYOUT["yaxis"], title="Litros acumulados", tickformat=".3s"),
         }
